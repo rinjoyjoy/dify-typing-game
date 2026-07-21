@@ -304,6 +304,18 @@ $('#chat-input').addEventListener('keypress', (e) => {
 
 $('#btn-chat-send').addEventListener('click', handleChatSend);
 
+$('#btn-chat-finish').addEventListener('click', () => {
+  // 強制的にゲーム画面へ移行（JSONが出なかった場合のフォールバック）
+  // 未判定の場合はとりあえず Achiever をデフォルトとして設定
+  appState.hexadResult = {
+    primaryType: 'achiever',
+    scores: { achiever: 100, player: 50, socialiser: 50, freeSpirit: 50, philanthropist: 50, disruptor: 50 },
+    rationale: 'AIが判定を完了する前に会話を終了したため、標準タイプが選択されました。'
+  };
+  renderResult(appState.hexadResult);
+  showScreen('screen-result');
+});
+
 async function handleChatSend() {
   const input = $('#chat-input');
   const text = input.value.trim();
