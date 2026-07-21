@@ -354,6 +354,25 @@ function appendChatMessage(role, text) {
     if (!hasChoices) {
       msgDiv.innerHTML = text.replace(/\n/g, '<br>');
     }
+    
+    // AIのメッセージに「完了」「準備」などのキーワードが含まれていたら、
+    // チャット内にも目立つように「ゲームを始める」ボタンを追加する
+    if (text.includes('完了') || text.includes('準備') || text.includes('ゲームを始め')) {
+      const finishContainer = document.createElement('div');
+      finishContainer.style.marginTop = '16px';
+      
+      const finishBtn = document.createElement('button');
+      finishBtn.className = 'btn btn-primary';
+      finishBtn.style.width = '100%';
+      finishBtn.style.padding = '12px';
+      finishBtn.style.fontWeight = 'bold';
+      finishBtn.textContent = '🎲 タイピングゲームを始める';
+      finishBtn.onclick = () => {
+        $('#btn-chat-finish').click(); // 既存の終了処理を呼び出す
+      };
+      finishContainer.appendChild(finishBtn);
+      msgDiv.appendChild(finishContainer);
+    }
   } else {
     msgDiv.textContent = text;
   }
