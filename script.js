@@ -394,12 +394,36 @@ $('#chat-input').addEventListener('keypress', (e) => {
 $('#btn-chat-send').addEventListener('click', handleChatSend);
 
 $('#btn-chat-finish').addEventListener('click', () => {
-  // 強制的にゲーム画面へ移行（JSONが出なかった場合のフォールバック）
-  // 未判定の場合はとりあえず Achiever をデフォルトとして設定
+  // チャット画面全体のテキストを取得
+  const chatText = $('#chat-messages').innerText || '';
+  
+  // 各タイプのキーワード出現回数をカウント
+  const typeCounts = {
+    achiever: (chatText.match(/達成/g) || []).length,
+    player: (chatText.match(/プレイ|報酬|ポイント/g) || []).length,
+    socialiser: (chatText.match(/社交|交流|みんなと|人/g) || []).length,
+    freeSpirit: (chatText.match(/自由|探求/g) || []).length,
+    philanthropist: (chatText.match(/利他|貢献|誰かのため/g) || []).length,
+    disruptor: (chatText.match(/変革|ルールを変/g) || []).length
+  };
+  
+  // 最もカウントが多いタイプを選ぶ（デフォルトは achiever）
+  let bestType = 'achiever';
+  let maxCount = -1;
+  for (const [type, count] of Object.entries(typeCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      bestType = type;
+    }
+  }
+
+  // 判定できなかった場合
+  if (maxCount === 0) bestType = 'achiever';
+
   appState.hexadResult = {
-    primaryType: 'achiever',
-    scores: { achiever: 100, player: 50, socialiser: 50, freeSpirit: 50, philanthropist: 50, disruptor: 50 },
-    rationale: 'AIが判定を完了する前に会話を終了したため、標準タイプが選択されました。'
+    primaryType: bestType,
+    scores: { achiever: 50, player: 50, socialiser: 50, freeSpirit: 50, philanthropist: 50, disruptor: 50 },
+    rationale: 'AIの会話内容から推測してタイプを判定しました。'
   };
   renderResult(appState.hexadResult);
   showScreen('screen-result');
