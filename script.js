@@ -287,7 +287,77 @@ function appendChatMessage(role, text) {
   const container = $('#chat-messages');
   const msgDiv = document.createElement('div');
   msgDiv.className = `chat-message ${role}`;
-  msgDiv.textContent = text;
+  
+  if (role === 'ai') {
+    // 選択肢（1. xxx 2. xxx）を抽出してボタンにする処理
+    // 例: "1. 〇〇" のように始まり、改行またはスペースで区切られるパターン
+    let formattedText = escapeHtml(text);
+    
+    // 単純な番号付きリスト（1. xxx \n 2. xxx）を探す
+    const choiceRegex = /(\d+)[\.\、]\s*([^\n\d]+)/g;
+    let match;
+    let hasChoices = false;
+    let choicesHtml = '';
+    
+    // もし改行等で区切られた明確な選択肢フォーマットなら、ボタンに変換する
+    if (text.includes('1.') || text.includes('1、')) {
+      const lines = text.split('\n');
+      let mainText = [];
+      let buttons = [];
+      
+      lines.forEach(line => {
+        const m = line.match(/^(\d+)[\.\、]\s*(.+)$/);
+        if (m) {
+          buttons.push(m[2].trim());
+        } else {
+          // 同じ行の中に「1. xxx 2. xxx」と連続しているパターン
+          const inlineMatches = [...line.matchAll(/(\d+)[\.\、]\s*([^1-9]+)(?=\d+[\.\、]|$)/g)];
+          if (inlineMatches.length > 1) {
+            inlineMatches.forEach(im => buttons.push(im[2].trim()));
+          } else {
+            mainText.push(line);
+          }
+        }
+      });
+      
+      if (buttons.length > 0) {
+        msgDiv.innerHTML = mainText.join('<br>') + '<div class="chat-choices">';
+        const choicesContainer = document.createElement('div');
+        choicesContainer.className = 'chat-choices';
+        choicesContainer.style.display = 'flex';
+        choicesContainer.style.flexDirection = 'column';
+        choicesContainer.style.gap = '8px';
+        choicesContainer.style.marginTop = '12px';
+        
+        buttons.forEach((btnText, i) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-secondary';
+          btn.style.padding = '8px';
+          btn.style.fontSize = '0.9rem';
+          btn.style.textAlign = 'left';
+          btn.textContent = `${i + 1}. ${btnText}`;
+          btn.onclick = () => {
+            if (!$('#btn-chat-send').disabled || !isChatting) {
+              $('#chat-input').value = btnText;
+              handleChatSend();
+            }
+          };
+          choicesContainer.appendChild(btn);
+        });
+        
+        msgDiv.innerHTML = mainText.join('<br>');
+        msgDiv.appendChild(choicesContainer);
+        hasChoices = true;
+      }
+    }
+    
+    if (!hasChoices) {
+      msgDiv.innerHTML = text.replace(/\n/g, '<br>');
+    }
+  } else {
+    msgDiv.textContent = text;
+  }
+  
   container.appendChild(msgDiv);
   container.scrollTop = container.scrollHeight;
 }

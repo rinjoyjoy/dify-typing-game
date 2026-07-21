@@ -294,7 +294,7 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
 }
 .chat-message.user {
   align-self: flex-end;
-  background: var(--primary);
+  background: var(--type-achiever, #2a78d6); /* Fix: missing var(--primary) */
   color: white;
   border-bottom-right-radius: 2px;
 }
