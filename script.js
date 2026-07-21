@@ -331,7 +331,14 @@ async function handleChatSend() {
     
     container.removeChild(loadingDiv);
     
-    if (!res.ok) throw new Error(`サーバーエラー (${res.status})`);
+    if (!res.ok) {
+      let errMsg = `サーバーエラー (${res.status})`;
+      try {
+        const errorData = await res.json();
+        if (errorData.error) errMsg += `: ${errorData.error}`;
+      } catch (e) {}
+      throw new Error(errMsg);
+    }
     
     const data = await res.json();
     conversationId = data.conversation_id || conversationId;
