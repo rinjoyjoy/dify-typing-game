@@ -304,6 +304,30 @@ function renderGradeTableHtml(userCpm = null) {
   `;
 }
 
+function renderPersonalHistoryHtml(stats, currentCpm = null) {
+  const top = (stats.leaderboard || []).slice().sort((a, b) => b.cpm - a.cpm).slice(0, 5);
+  if (!top.length) {
+    return `<div class="personal-history-box" style="margin-top:12px;"><p class="hint">まだ個人の記録がありません。プレイして自己ベストを更新しましょう！</p></div>`;
+  }
+  return `
+    <div class="personal-history-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
+      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">🏆 あなたの自己ベスト TOP 5（個人記録）</h3>
+      <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
+        ${top.map((r, idx) => {
+          const isCurrent = currentCpm !== null && r.cpm === currentCpm;
+          const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '';
+          return `
+            <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isCurrent ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
+              <span>第${idx + 1}位 ${isCurrent ? '🌟 今回' : ''}</span>
+              <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
+            </li>
+          `;
+        }).join('')}
+      </ul>
+    </div>
+  `;
+}
+
 // セッション設定（全タイプ共通のUI要素）。1回のプレイで複数の文を連続して出題する。
 const TIME_OPTIONS = [
   { value: '30', label: '30秒' },
@@ -934,6 +958,7 @@ function setupAchiever(body, stats) {
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
       ${next ? `<div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (stats.sessionsCompleted / next.count) * 100)}%;background:${HEXAD_TYPES.achiever.color}"></div></div><p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回クリア</p>` : '<p class="hint">全ての称号を獲得済みです！</p>'}
+      ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
   `;
@@ -970,8 +995,9 @@ function setupPlayer(body, stats) {
 
 function setupSocialiser(body, stats) {
   body.innerHTML = `
-    <p class="lead">タイピング速度の評価基準（目標レベル）を意識しながら高みを目指しましょう。</p>
+    <p class="lead">タイピング速度の評価基準と自分の過去ベストを目標に高みを目指しましょう。</p>
     <div class="setup-row">
+      ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
   `;
@@ -1382,6 +1408,7 @@ function postAchiever(result, stats) {
     <p style="font-size:1.3rem;">${stars}</p>
     <p>通算クリア回数: <strong>${stats.sessionsCompleted}</strong> 回 / 現在の称号: <strong>${badge ? badge.name : 'なし'}</strong></p>
     ${next ? `<p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回</p>` : '<p class="hint">全称号を獲得しました！</p>'}
+    ${renderPersonalHistoryHtml(stats, result.cpm)}
   `;
 }
 function postPlayer(result, stats, newUnlocks) {
@@ -1396,6 +1423,7 @@ function postSocialiser(result, stats) {
   return `
     <h3>今回の評価結果</h3>
     <p style="font-size:1.3rem;">あなたの判定: <strong style="color:${grade.color};">${grade.grade}</strong> (${result.cpm} CPM)</p>
+    ${renderPersonalHistoryHtml(stats, result.cpm)}
     ${renderGradeTableHtml(result.cpm)}
   `;
 }
