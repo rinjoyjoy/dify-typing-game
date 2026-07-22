@@ -925,7 +925,28 @@ function renderSetup() {
   };
   appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60' };
 
-  body.innerHTML = '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
+  const res = appState.hexadResult;
+  let chartHtml = '';
+  if (res && res.scores) {
+    chartHtml = `
+      <details style="margin-bottom: 1.5rem; background: rgba(0,0,0,0.02); padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd;">
+        <summary style="cursor: pointer; font-weight: bold; color: #333;">📊 自身のタイプ内訳（6要素スコア）を見る</summary>
+        <div class="bar-chart" style="margin-top: 10px;">
+          ${HEXAD_ORDER.map((t) => {
+            const score = Math.max(0, Math.min(100, Math.round(res.scores[t] ?? 0)));
+            return `
+              <div class="bar-row" style="margin-bottom: 6px;">
+                <span class="bar-label" style="font-size: 0.85rem;">${HEXAD_TYPES[t].label.split(' ')[0]}</span>
+                <span class="bar-track"><span class="bar-fill" style="width:${score}%;background:${HEXAD_TYPES[t].color}"></span></span>
+                <span class="bar-value" style="font-size: 0.85rem;">${score}</span>
+              </div>`;
+          }).join('')}
+        </div>
+      </details>
+    `;
+  }
+
+  body.innerHTML = chartHtml + '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
   renderSessionSettings(body.querySelector('.session-settings'), HEXAD_TYPES[type].color);
   builders[type](body.querySelector('.setup-type-body'), stats);
 }
