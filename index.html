@@ -1,123 +1,126 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>タイプ適応型タイピングゲーム（研究用プロトタイプ）</title>
-<link rel="stylesheet" href="style.css?v=2">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タイプ適応型タイピングゲーム（研究用プロトタイプ）</title>
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
+
 <body>
-<div id="app">
+  <div id="app">
 
-  <!-- ============ 0. ようこそ / 設定画面 ============ -->
-  <section id="screen-welcome" class="screen active">
-    <div class="card">
-      <h1>タイプ適応型 タイピングゲーム</h1>
-      <p class="lead">簡単なアンケートでゲーミフィケーション嗜好タイプ（Hexadモデル）を判定し、あなたのタイプに合わせた要素でタイピング練習を行う研究用プロトタイプです。</p>
+    <!-- ============ 0. ようこそ / 設定画面 ============ -->
+    <section id="screen-welcome" class="screen active">
+      <div class="card">
+        <h1>カスタムタイピング</h1>
+        <p class="lead">簡単なアンケートでゲーミフィケーション嗜好タイプ（Hexadモデル）を判定し、あなたのタイプに合わせた要素でタイピング練習を行う研究用プロトタイプです。</p>
 
-      <div class="button-row">
-        <button id="btn-start-survey-llm" class="btn btn-primary">タイプ診断を始める</button>
-      </div>
-      <p class="hint small">※研究にご協力いただく場合は、担当者の案内に従ってください。</p>
-    </div>
-  </section>
-
-  <!-- ============ 1. チャット診断画面 ============ -->
-  <section id="screen-survey" class="screen">
-    <div class="card chat-card">
-      <div id="chat-messages" class="chat-messages">
-        <!-- チャット履歴がここに追加される -->
-      </div>
-      <div class="chat-input-area">
-        <textarea id="chat-input" rows="2" placeholder="メッセージを入力..." autocomplete="off"></textarea>
-        <button id="btn-chat-send" class="btn btn-primary" disabled>送信</button>
-      </div>
-      <div class="button-row" style="margin-top: 1rem;">
-        <button id="btn-chat-finish" class="btn btn-secondary">会話を終了してゲームを始める</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 2. 判定中 ============ -->
-  <section id="screen-analyzing" class="screen">
-    <div class="card center">
-      <div class="spinner" aria-hidden="true"></div>
-      <p id="analyzing-text">回答を分析しています...</p>
-    </div>
-  </section>
-
-  <!-- ============ 3. 判定結果 ============ -->
-  <section id="screen-result" class="screen">
-    <div class="card">
-      <h2>あなたのゲーミフィケーションタイプ</h2>
-      <div id="result-badge" class="type-badge"></div>
-      <p id="result-rationale" class="lead"></p>
-
-      <div id="result-chart" class="bar-chart" role="img" aria-label="6タイプのスコア"></div>
-      <p id="result-fallback-note" class="hint" style="display:none;">※LLM判定に失敗したため、回答スコアに基づく簡易判定を表示しています。</p>
-
-      <div class="button-row">
-        <button id="btn-goto-setup" class="btn btn-primary">タイピング練習へ進む</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 4. ゲーム設定（タイプ別） ============ -->
-  <section id="screen-setup" class="screen">
-    <div class="card">
-      <h2 id="setup-title">練習の準備</h2>
-      <div id="setup-body"></div>
-      <div class="button-row">
-        <button id="btn-start-game" class="btn btn-primary">スタート</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 5. タイピング画面 ============ -->
-  <section id="screen-game" class="screen">
-    <div class="card">
-      <div id="game-hud" class="game-hud"></div>
-
-      <div id="game-sentence" class="game-sentence">
-        <div id="game-kanji" class="game-kanji"></div>
-        <div id="game-reading" class="game-reading"></div>
-        <div id="game-romaji" class="game-romaji"></div>
-      </div>
-
-      <div id="game-side-panel" class="game-side-panel"></div>
-
-      <div class="button-row">
-        <button id="btn-end-session" class="btn btn-tertiary">終了して結果を見る</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ 6. ゲーム結果 ============ -->
-  <section id="screen-postgame" class="screen">
-    <div class="card">
-      <h2>結果</h2>
-      <div id="postgame-stats" class="stats-grid"></div>
-      <div id="postgame-gamification" class="gamification-box"></div>
-
-      <div class="button-row">
-        <button id="btn-play-again" class="btn btn-primary">もう一度プレイ</button>
-        <button id="btn-back-setup" class="btn btn-secondary">設定に戻る</button>
-      </div>
-
-      <details class="export-details">
-        <summary>研究データのエクスポート</summary>
-        <p class="hint">この端末に保存されたセッション記録（<span id="log-count">0</span>件）を書き出します。</p>
         <div class="button-row">
-          <button id="btn-export-json" class="btn btn-tertiary">JSONで書き出す</button>
-          <button id="btn-export-csv" class="btn btn-tertiary">CSVで書き出す</button>
-          <button id="btn-clear-log" class="btn btn-danger">記録を削除</button>
+          <button id="btn-start-survey-llm" class="btn btn-primary">タイプ診断を始める</button>
         </div>
-      </details>
-    </div>
-  </section>
+        <p class="hint small">※研究にご協力いただく場合は、担当者の案内に従ってください。</p>
+      </div>
+    </section>
 
-</div>
-<script src="survey-data.js"></script>
-<script src="script.js"></script>
+    <!-- ============ 1. チャット診断画面 ============ -->
+    <section id="screen-survey" class="screen">
+      <div class="card chat-card">
+        <div id="chat-messages" class="chat-messages">
+          <!-- チャット履歴がここに追加される -->
+        </div>
+        <div class="chat-input-area">
+          <textarea id="chat-input" rows="2" placeholder="メッセージを入力..." autocomplete="off"></textarea>
+          <button id="btn-chat-send" class="btn btn-primary" disabled>送信</button>
+        </div>
+        <div class="button-row" style="margin-top: 1rem;">
+          <button id="btn-chat-finish" class="btn btn-secondary">会話を終了してゲームを始める</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2. 判定中 ============ -->
+    <section id="screen-analyzing" class="screen">
+      <div class="card center">
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="analyzing-text">回答を分析しています...</p>
+      </div>
+    </section>
+
+    <!-- ============ 3. 判定結果 ============ -->
+    <section id="screen-result" class="screen">
+      <div class="card">
+        <h2>あなたのゲーミフィケーションタイプ</h2>
+        <div id="result-badge" class="type-badge"></div>
+        <p id="result-rationale" class="lead"></p>
+
+        <div id="result-chart" class="bar-chart" role="img" aria-label="6タイプのスコア"></div>
+        <p id="result-fallback-note" class="hint" style="display:none;">※LLM判定に失敗したため、回答スコアに基づく簡易判定を表示しています。</p>
+
+        <div class="button-row">
+          <button id="btn-goto-setup" class="btn btn-primary">タイピング練習へ進む</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4. ゲーム設定（タイプ別） ============ -->
+    <section id="screen-setup" class="screen">
+      <div class="card">
+        <h2 id="setup-title">練習の準備</h2>
+        <div id="setup-body"></div>
+        <div class="button-row">
+          <button id="btn-start-game" class="btn btn-primary">スタート</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5. タイピング画面 ============ -->
+    <section id="screen-game" class="screen">
+      <div class="card">
+        <div id="game-hud" class="game-hud"></div>
+
+        <div id="game-sentence" class="game-sentence">
+          <div id="game-kanji" class="game-kanji"></div>
+          <div id="game-reading" class="game-reading"></div>
+          <div id="game-romaji" class="game-romaji"></div>
+        </div>
+
+        <div id="game-side-panel" class="game-side-panel"></div>
+
+        <div class="button-row">
+          <button id="btn-end-session" class="btn btn-tertiary">終了して結果を見る</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6. ゲーム結果 ============ -->
+    <section id="screen-postgame" class="screen">
+      <div class="card">
+        <h2>結果</h2>
+        <div id="postgame-stats" class="stats-grid"></div>
+        <div id="postgame-gamification" class="gamification-box"></div>
+
+        <div class="button-row">
+          <button id="btn-play-again" class="btn btn-primary">もう一度プレイ</button>
+          <button id="btn-back-setup" class="btn btn-secondary">設定に戻る</button>
+        </div>
+
+        <details class="export-details" id="secret-export-ui" style="display: none;">
+          <summary>研究データのエクスポート</summary>
+          <p class="hint">この端末に保存されたセッション記録（<span id="log-count">0</span>件）を書き出します。</p>
+          <div class="button-row">
+            <button id="btn-export-json" class="btn btn-tertiary">JSONで書き出す</button>
+            <button id="btn-export-csv" class="btn btn-tertiary">CSVで書き出す</button>
+            <button id="btn-clear-log" class="btn btn-danger">記録を削除</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </div>
+  <script src="survey-data.js"></script>
+  <script src="script.js"></script>
 </body>
+
 </html>

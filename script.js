@@ -1385,4 +1385,22 @@ $('#btn-clear-log').addEventListener('click', () => {
 
 document.addEventListener('DOMContentLoaded', () => {
   initWelcomeScreen();
+  
+  // 隠しコマンド（けんきゅうでーた）でエクスポート画面を表示
+  let secretBuffer = '';
+  document.addEventListener('keydown', (e) => {
+    // 制御キーなどは無視（ただしIME入力のProcessは許可）
+    if (e.key.length > 1 && e.key !== 'Process') return;
+    
+    secretBuffer += e.key;
+    if (secretBuffer.length > 30) secretBuffer = secretBuffer.slice(-30);
+    
+    // ローマ字入力、または直接入力の両方に対応
+    if (secretBuffer.endsWith('kenkyuude-ta') || secretBuffer.endsWith('けんきゅうでーた')) {
+      const exportUi = $('#secret-export-ui');
+      exportUi.style.display = 'block';
+      exportUi.scrollIntoView({ behavior: 'smooth' });
+      secretBuffer = ''; // リセット
+    }
+  });
 });
