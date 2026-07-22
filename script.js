@@ -257,9 +257,9 @@ const COIN_UNLOCKS = [
 const COMMUNITY_GOAL = 5000;
 
 const DISRUPTOR_RULES = {
-  speed:    { label: '速さ優先ルール',       calc: (cpm, acc) => Math.round(cpm * 2) },
-  accuracy: { label: '正確さ優先ルール',     calc: (cpm, acc) => Math.round(acc * 10) },
-  chaos:    { label: 'カオスルール',         calc: (cpm, acc) => Math.round((cpm * acc) / 10) },
+  speed:    { label: '速さ優先ルール',       calc: (cpm, acc, total) => Math.round((cpm * 2 + total) * (acc / 100)) },
+  accuracy: { label: '正確さ優先ルール',     calc: (cpm, acc, total) => Math.round((total * 5 + cpm) * Math.pow(acc / 100, 4)) },
+  chaos:    { label: 'カオスルール',         calc: (cpm, acc, total) => Math.round((cpm * acc * total) / 1000) },
 };
 
 // セッション設定（全タイプ共通のUI要素）。1回のプレイで複数の文を連続して出題する。
@@ -1149,16 +1149,20 @@ function barRow(label, pct, value, color) {
   return `<div class="bar-row"><span class="bar-label">${label}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.max(0, Math.min(100, pct))}%;background:${color}"></span></span><span class="bar-value">${value}</span></div>`;
 }
 
-function computeScore(cpm, acc) { return Math.round((cpm * acc) / 10); }
+function computeScore(cpm, acc, totalChars) { 
+  const accFactor = Math.pow(acc / 100, 2); 
+  return Math.round((totalChars * 2 + cpm * 0.5) * accFactor); 
+}
 
 function vizAchiever() {
   const cpm = currentCpm();
   const acc = currentAccuracy();
+  const total = game ? game.totalCorrect : 0;
   const stars = acc >= 95 && cpm >= 150 ? '★★★' : acc >= 85 ? '★★☆' : '★☆☆';
   const color = HEXAD_TYPES.achiever.color;
   return `
     <p class="hint">今終えた場合の評価</p>
-    <p style="font-size:1.3rem;">${stars} <strong style="color:${color};font-size:1.3rem;">${computeScore(cpm, acc)} pt</strong></p>
+    <p style="font-size:1.3rem;">${stars} <strong style="color:${color};font-size:1.3rem;">${computeScore(cpm, acc, total)} pt</strong></p>
     ${barRow('速度', (cpm / 300) * 100, `${cpm}`, color)}
     ${barRow('正確率', acc, `${acc}%`, color)}
   `;
@@ -1210,7 +1214,7 @@ function vizPhilanthropist() {
 
 function vizDisruptor() {
   const rule = DISRUPTOR_RULES[appState.setup.rule];
-  const score = rule.calc(currentCpm(), currentAccuracy());
+  const score = rule.calc(currentCpm(), currentAccuracy(), game ? game.totalCorrect : 0);
   return `
     <p class="hint">適用ルール: ${rule.label}</p>
     <p style="font-size:1.8rem;font-weight:700;color:${HEXAD_TYPES.disruptor.color}">${score} pt</p>
@@ -1337,7 +1341,7 @@ function postPhilanthropist(result, stats) {
 }
 function postDisruptor(result) {
   const rule = DISRUPTOR_RULES[appState.setup.rule];
-  const score = rule.calc(result.cpm, result.accuracy);
+  const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
   return `
     <h3>あなたのルールでのスコア</h3>
     <p>適用ルール: <strong>${rule.label}</strong></p>
