@@ -383,6 +383,8 @@ const BASE_KANA = {
   'ら': ['ra'], 'り': ['ri'], 'る': ['ru'], 'れ': ['re'], 'ろ': ['ro'],
   'わ': ['wa'], 'を': ['wo', 'o'],
   'ん': ['n', 'nn'],
+  'ー': ['-'],
+  'ぁ': ['xa', 'la'], 'ぃ': ['xi', 'li'], 'ぅ': ['xu', 'lu'], 'ぇ': ['xe', 'le'], 'ぉ': ['xo', 'lo'],
 };
 
 const YOUON_KANA = {
@@ -1128,7 +1130,7 @@ function onGameKeydown(e) {
   if (!document.getElementById('screen-game').classList.contains('active')) return;
   if (!game || game.endTime) return;
   if (e.key === 'Backspace') { game.buffer = ''; renderGame(); e.preventDefault(); return; }
-  if (!/^[a-zA-Z]$/.test(e.key)) return;
+  if (!/^[a-zA-Z\-]$/.test(e.key)) return;
   e.preventDefault();
   if (!game.startTime) {
     game.startTime = Date.now();
