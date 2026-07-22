@@ -410,15 +410,23 @@ $('#btn-chat-finish').addEventListener('click', async () => {
   
   // 分析中画面を表示
   showScreen('screen-analyzing');
-
+  
   try {
-    // 内部的にDifyへ最終診断をリクエストする
+    // これまでの会話内容をテキストとして取得
+    const chatText = $('#chat-messages').innerText || '';
+    const finalPrompt = `以下の会話履歴を分析し、ユーザーのHexadゲーミフィケーションタイプを診断してください。
+必ず以下のJSON形式のみを出力してください（挨拶やJSON以外のテキストは一切含めないでください）。
+{"primaryType":"achiever", "scores":{"achiever":80, "player":50, "socialiser":20, "freeSpirit":30, "philanthropist":40, "disruptor":10}}
+
+【会話履歴】
+${chatText}`;
+
+    // 内部的にDifyへ最終診断をリクエストする（会話IDをリセットして新規タスクとして実行）
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ 
-        message: 'ここまでの会話内容を元にユーザーのHexadゲーミフィケーションタイプを診断し、指定されたJSON形式（primaryType, scores, rationaleを含む）のみを出力してください。', 
-        conversation_id: conversationId 
+        message: finalPrompt
       }),
     });
     
