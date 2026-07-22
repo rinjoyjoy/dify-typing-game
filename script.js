@@ -455,11 +455,9 @@ ${chatText}`;
           }
         } catch (e) {
           console.error("JSON Parse error:", e, "Raw output:", jsonStr);
-          alert("【デバッグ情報】JSONパースエラー:\n" + jsonStr);
         }
       } else {
         console.warn("LLM format mismatch. Raw answer:", answerText);
-        alert("【デバッグ情報】LLMがJSONを返しませんでした:\n" + answerText);
       }
       
     }
