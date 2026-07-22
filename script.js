@@ -280,6 +280,7 @@ const TYPE_DEFAULT_TIME = { philanthropist: 'none' };
 const STORAGE_KEYS = {
   model: 'gtp_model', nickname: 'gtp_nickname',
   stats: 'gtp_stats', log: 'gtp_log',
+  hexadResult: 'gtp_hexad_result',
 };
 
 const DEFAULT_STATS = {
@@ -429,6 +430,22 @@ function downloadBlob(filename, content, mime) {
    ============================================================ */
 
 function initWelcomeScreen() {
+  const savedResultStr = localStorage.getItem(STORAGE_KEYS.hexadResult);
+  if (savedResultStr) {
+    const resumeBtn = $('#btn-resume-session');
+    resumeBtn.style.display = 'block';
+    resumeBtn.addEventListener('click', () => {
+      try {
+        appState.hexadResult = JSON.parse(savedResultStr);
+        appState.nickname = localStorage.getItem(STORAGE_KEYS.nickname) || 'ゲスト';
+        renderSetup();
+        showScreen('screen-setup');
+      } catch (e) {
+        console.error("Resume failed", e);
+      }
+    });
+  }
+
   $('#btn-start-survey-llm').addEventListener('click', () => {
     appState.classifyMethod = 'llm';
     appState.nickname = 'ゲスト';
@@ -618,6 +635,7 @@ ${chatText}`;
               result.scores[result.primaryType] = 100;
             }
             appState.hexadResult = result;
+            localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
             $('#result-fallback-note').style.display = 'none';
             renderResult(result);
             showScreen('screen-result');
@@ -680,6 +698,7 @@ ${chatText}`;
     scores: calculatedScores,
     rationale: '会話内容から各要素の強さを推測しました。'
   };
+  localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(appState.hexadResult));
   
   $('#result-fallback-note').style.display = 'block';
   renderResult(appState.hexadResult);
@@ -745,6 +764,7 @@ async function handleChatSend() {
       try {
         const result = JSON.parse(jsonMatch[0]);
         appState.hexadResult = result;
+        localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
         setTimeout(() => {
           renderResult(result);
           showScreen('screen-result');
