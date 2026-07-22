@@ -1150,8 +1150,8 @@ function barRow(label, pct, value, color) {
 }
 
 function computeScore(cpm, acc, totalChars) { 
-  const accFactor = Math.pow(acc / 100, 2); 
-  return Math.round((totalChars * 2 + cpm * 0.5) * accFactor); 
+  // 以前の直線的な減点幅（acc / 100）に戻しつつ、入力数（totalChars）を掛け合わせて早期終了のスコア跳ね上がりを防止
+  return Math.round((totalChars * cpm * acc) / 1000); 
 }
 
 function vizAchiever() {
