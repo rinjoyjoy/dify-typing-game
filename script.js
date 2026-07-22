@@ -262,6 +262,48 @@ const DISRUPTOR_RULES = {
   chaos:    { label: 'カオスルール',         calc: (cpm, acc, total) => Math.round((cpm * acc * total) / 1000) },
 };
 
+const GRADE_TABLE = [
+  { min: 300, grade: 'Sランク', desc: '神速レベル（プロ級）', color: '#e34948' },
+  { min: 200, grade: 'Aランク', desc: '上級レベル（目標: 200 CPM〜）', color: '#eda100' },
+  { min: 150, grade: 'Bランク', desc: '中級レベル（標準）', color: '#1baf7a' },
+  { min: 100, grade: 'Cランク', desc: '初級レベル（脱初心者）', color: '#2a78d6' },
+  { min: 0,   grade: 'Dランク', desc: '見習いレベル', color: '#666666' },
+];
+
+function getGrade(cpm) {
+  return GRADE_TABLE.find((g) => cpm >= g.min) || GRADE_TABLE[GRADE_TABLE.length - 1];
+}
+
+function renderGradeTableHtml(userCpm = null) {
+  const currentGrade = userCpm !== null ? getGrade(userCpm).grade : null;
+  return `
+    <div class="grade-table-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
+      <h3 style="margin-top:0; font-size:1.1rem; color:#333;">タイピング速度 評価基準表</h3>
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.95rem;">
+        <thead>
+          <tr style="border-bottom:2px solid #ccc;">
+            <th style="padding:6px;">ランク</th>
+            <th style="padding:6px;">基準 (CPM)</th>
+            <th style="padding:6px;">目安</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${GRADE_TABLE.map((g) => {
+            const isMatch = currentGrade === g.grade;
+            return `
+              <tr style="${isMatch ? 'background:rgba(42,120,214,0.18); font-weight:bold;' : ''} border-bottom:1px solid #eee;">
+                <td style="padding:6px; color:${g.color};">${g.grade} ${isMatch ? '👈 あなた' : ''}</td>
+                <td style="padding:6px;">${g.min === 0 ? '100未満' : g.min + ' 文字/分〜'}</td>
+                <td style="padding:6px; font-size:0.85rem; color:#555;">${g.desc}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 // セッション設定（全タイプ共通のUI要素）。1回のプレイで複数の文を連続して出題する。
 const TIME_OPTIONS = [
   { value: '30', label: '30秒' },
@@ -892,6 +934,7 @@ function setupAchiever(body, stats) {
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
       ${next ? `<div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (stats.sessionsCompleted / next.count) * 100)}%;background:${HEXAD_TYPES.achiever.color}"></div></div><p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回クリア</p>` : '<p class="hint">全ての称号を獲得済みです！</p>'}
+      ${renderGradeTableHtml()}
     </div>
   `;
 }
@@ -926,14 +969,10 @@ function setupPlayer(body, stats) {
 }
 
 function setupSocialiser(body, stats) {
-  const top = stats.leaderboard.slice().sort((a, b) => b.cpm - a.cpm).slice(0, 5);
   body.innerHTML = `
-    <p class="lead">他のプレイ記録と競い合いましょう（この端末内のランキングです）。</p>
+    <p class="lead">タイピング速度の評価基準（目標レベル）を意識しながら高みを目指しましょう。</p>
     <div class="setup-row">
-      <h3>ランキング（速度 文字/分）</h3>
-      <ul class="leaderboard">
-        ${top.length ? top.map((r) => `<li><span>${escapeHtml(r.name)}</span><span>${r.cpm}</span></li>`).join('') : '<li>まだ記録がありません。最初の記録を作りましょう！</li>'}
-      </ul>
+      ${renderGradeTableHtml()}
     </div>
   `;
 }
@@ -1163,7 +1202,10 @@ function updateHud() {
 
 function hudAchiever() { return `<div class="hud-item">正打数<strong>${game.totalCorrect}</strong></div>`; }
 function hudPlayer() { return `<div class="hud-item">獲得コイン<strong>🪙 ${game.totalCorrect}</strong></div>`; }
-function hudSocialiser() { const top = getStats().leaderboard[0]; return `<div class="hud-item">目標(1位)<strong>${top ? top.cpm : '-'} 文字/分</strong></div>`; }
+function hudSocialiser() { 
+  const g = getGrade(currentCpm()); 
+  return `<div class="hud-item">評価ランク<strong style="color:${g.color};">${g.grade}</strong></div>`; 
+}
 function hudFreeSpirit() { return ''; }
 function hudPhilanthropist() { const s = getStats(); return `<div class="hud-item">貢献合計<strong>${s.communityTotal + game.totalCorrect} 文字</strong></div>`; }
 function hudDisruptor() { return `<div class="hud-item">ルール<strong>${DISRUPTOR_RULES[appState.setup.rule].label}</strong></div>`; }
@@ -1212,14 +1254,12 @@ function vizPlayer() {
 }
 
 function vizSocialiser() {
-  const top = getStats().leaderboard[0];
-  const topCpm = top ? top.cpm : 0;
   const mine = currentCpm();
-  const scale = Math.max(topCpm, mine, 1);
+  const grade = getGrade(mine);
   return `
-    <p class="hint">1位との速度比較（文字/分）</p>
-    ${barRow('あなた', (mine / scale) * 100, `${mine}`, HEXAD_TYPES.socialiser.color)}
-    ${barRow('1位', (topCpm / scale) * 100, `${topCpm || '-'}`, 'var(--baseline)')}
+    <p class="hint">現在の速度評価</p>
+    <p style="font-size:1.3rem;"><strong style="color:${grade.color};">${grade.grade}</strong> (${grade.desc})</p>
+    ${barRow('あなたの速度', (mine / 300) * 100, `${mine} CPM`, HEXAD_TYPES.socialiser.color)}
   `;
 }
 
@@ -1352,14 +1392,11 @@ function postPlayer(result, stats, newUnlocks) {
   `;
 }
 function postSocialiser(result, stats) {
-  const rank = stats.leaderboard.findIndex((r) => r.date && r.cpm === result.cpm && r.name === appState.nickname) + 1;
-  const top = stats.leaderboard.slice(0, 5);
+  const grade = getGrade(result.cpm);
   return `
-    <h3>ランキング</h3>
-    <p>あなたの順位: <strong>${rank || '-'}</strong> 位（この端末内 / 全${stats.leaderboard.length}件）</p>
-    <ul class="leaderboard">
-      ${top.map((r) => `<li class="${r.name === appState.nickname && r.cpm === result.cpm ? 'me' : ''}"><span>${escapeHtml(r.name)}</span><span>${r.cpm} 文字/分</span></li>`).join('')}
-    </ul>
+    <h3>今回の評価結果</h3>
+    <p style="font-size:1.3rem;">あなたの判定: <strong style="color:${grade.color};">${grade.grade}</strong> (${result.cpm} CPM)</p>
+    ${renderGradeTableHtml(result.cpm)}
   `;
 }
 function postFreeSpirit(result) {
