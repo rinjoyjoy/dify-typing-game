@@ -426,14 +426,19 @@ $('#btn-chat-finish').addEventListener('click', async () => {
       const data = await res.json();
       const answerText = data.answer || '';
       
-      // JSON形式の抽出（Markdownのコードブロックなどを考慮）
-      let cleanText = answerText.replace(/```json/gi, '').replace(/```/g, '');
-      const jsonMatch = cleanText.match(/\{[\s\S]*"primaryType"[\s\S]*"scores"[\s\S]*\}/);
+      const firstBrace = answerText.indexOf('{');
+      const lastBrace = answerText.lastIndexOf('}');
       
-      if (jsonMatch) {
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const jsonStr = answerText.substring(firstBrace, lastBrace + 1);
         try {
-          const result = JSON.parse(jsonMatch[0]);
-          if (result.primaryType && result.scores) {
+          const result = JSON.parse(jsonStr);
+          if (result.primaryType) {
+            // scoresが存在しない場合（LLMが省略した場合など）はダミーを入れる
+            if (!result.scores) {
+              result.scores = { achiever: 0, player: 0, socialiser: 0, freeSpirit: 0, philanthropist: 0, disruptor: 0 };
+              result.scores[result.primaryType] = 100;
+            }
             appState.hexadResult = result;
             $('#result-fallback-note').style.display = 'none';
             renderResult(result);
@@ -441,9 +446,11 @@ $('#btn-chat-finish').addEventListener('click', async () => {
             return; // 成功
           }
         } catch (e) {
-          console.error("JSON Parse error:", e);
+          console.error("JSON Parse error:", e, "Raw output:", jsonStr);
         }
       }
+      
+      console.warn("LLM format mismatch. Raw answer:", answerText);
     }
   } catch (err) {
     console.error("Dify final evaluation error:", err);
