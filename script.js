@@ -286,6 +286,7 @@ const STORAGE_KEYS = {
 const DEFAULT_STATS = {
   sessionsCompleted: 0,
   totalCorrectChars: 0,
+  totalPlayTimeSec: 0,
   coins: 0,
   unlockedColors: ['#2a78d6'],
   selectedColor: '#2a78d6',
@@ -816,6 +817,17 @@ $('#btn-goto-setup').addEventListener('click', () => {
   showScreen('screen-setup');
 });
 
+$('#btn-rediagnose').addEventListener('click', () => {
+  if (confirm('現在の診断結果をリセットし、もう一度チャット診断からやり直しますか？\n（スコアや獲得コイン等の実績は維持されます）')) {
+    localStorage.removeItem(STORAGE_KEYS.hexadResult);
+    appState.hexadResult = null;
+    appState.nickname = 'ゲスト';
+    localStorage.setItem(STORAGE_KEYS.nickname, appState.nickname);
+    renderSurvey();
+    showScreen('screen-survey');
+  }
+});
+
 /* ============================================================
    4. タイプ別セットアップ画面
    ============================================================ */
@@ -1266,6 +1278,7 @@ function onGameFinished(result) {
   const stats = getStats();
   stats.sessionsCompleted++;
   stats.totalCorrectChars += result.correctKeystrokes;
+  stats.totalPlayTimeSec += result.elapsedSec;
   stats.communityTotal += result.correctKeystrokes;
   stats.coins += result.correctKeystrokes + 20;
 
@@ -1310,6 +1323,12 @@ function renderPostgame(result, stats, newUnlocks) {
   const type = appState.hexadResult.primaryType;
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
   $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks);
+
+  if (stats.totalPlayTimeSec >= 600) {
+    $('#rediagnose-row').style.display = 'flex';
+  } else {
+    $('#rediagnose-row').style.display = 'none';
+  }
 
   $('#log-count').textContent = getLog().length;
 }
