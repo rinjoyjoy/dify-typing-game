@@ -513,6 +513,15 @@ function initWelcomeScreen() {
         console.error("Resume failed", e);
       }
     });
+
+    const resetBtn = $('#btn-reset-welcome');
+    resetBtn.style.display = 'block';
+    resetBtn.addEventListener('click', () => {
+      if (confirm('保存されている診断結果や自己ベスト記録を全削除し、最初からやり直しますか？')) {
+        localStorage.clear();
+        location.reload();
+      }
+    });
   }
 
   $('#btn-start-survey-llm').addEventListener('click', () => {
