@@ -378,39 +378,96 @@ function appendChatMessage(role, text) {
   }
   
   container.appendChild(msgDiv);
-  container.scrollTop = container.scrollHeight;
+  
+  // メッセージが長くて画面に収まらない場合は先頭から読めるようにする
+  if (msgDiv.offsetHeight > container.clientHeight * 0.6) {
+    container.scrollTo({ top: msgDiv.offsetTop - 20, behavior: 'smooth' });
+  } else {
+    container.scrollTop = container.scrollHeight;
+  }
 }
 
 $('#chat-input').addEventListener('input', (e) => {
   $('#btn-chat-send').disabled = !e.target.value.trim() || isChatting;
 });
 
-$('#chat-input').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter' && !$('#btn-chat-send').disabled) {
-    handleChatSend();
+$('#chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!$('#btn-chat-send').disabled) {
+      handleChatSend();
+    }
   }
 });
 
 $('#btn-chat-send').addEventListener('click', handleChatSend);
 
-$('#btn-chat-finish').addEventListener('click', () => {
-  // チャット画面全体のテキストを取得
+$('#btn-chat-finish').addEventListener('click', async () => {
+  if (isChatting) return;
+  
+  const btn = $('#btn-chat-finish');
+  const originalText = btn.textContent;
+  
+  // 分析中画面を表示
+  showScreen('screen-analyzing');
+
+  try {
+    // 内部的にDifyへ最終診断をリクエストする
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ 
+        message: 'ここまでの会話内容を元にユーザーのHexadゲーミフィケーションタイプを診断し、指定されたJSON形式（primaryType, scores, rationaleを含む）のみを出力してください。', 
+        conversation_id: conversationId 
+      }),
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      const answerText = data.answer || '';
+      
+      // JSON形式の抽出（Markdownのコードブロックなどを考慮）
+      let cleanText = answerText.replace(/```json/gi, '').replace(/```/g, '');
+      const jsonMatch = cleanText.match(/\{[\s\S]*"primaryType"[\s\S]*"scores"[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        try {
+          const result = JSON.parse(jsonMatch[0]);
+          if (result.primaryType && result.scores) {
+            appState.hexadResult = result;
+            $('#result-fallback-note').style.display = 'none';
+            renderResult(result);
+            showScreen('screen-result');
+            return; // 成功
+          }
+        } catch (e) {
+          console.error("JSON Parse error:", e);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Dify final evaluation error:", err);
+  } finally {
+    btn.textContent = originalText;
+  }
+
+  // Difyからの取得に失敗した場合はキーワードカウントによるフォールバックを使用
   const chatText = $('#chat-messages').innerText || '';
   
-  // 各タイプのキーワード出現回数をカウント
   const typeCounts = {
-    achiever: (chatText.match(/達成/g) || []).length,
-    player: (chatText.match(/プレイ|報酬|ポイント/g) || []).length,
-    socialiser: (chatText.match(/社交|交流|みんなと|人/g) || []).length,
-    freeSpirit: (chatText.match(/自由|探求/g) || []).length,
-    philanthropist: (chatText.match(/利他|貢献|誰かのため/g) || []).length,
-    disruptor: (chatText.match(/変革|ルールを変/g) || []).length
+    achiever: (chatText.match(/達成|目標|クリア|上達|成長|スキル|極める/g) || []).length,
+    player: (chatText.match(/プレイ|報酬|ポイント|スコア|ランキング|勝負|勝つ|アイテム/g) || []).length,
+    socialiser: (chatText.match(/社交|交流|みんなと|人|友達|ワイワイ|一緒に|つながり/g) || []).length,
+    freeSpirit: (chatText.match(/自由|探求|マイペース|自分なり|新しい|好きに|発見/g) || []).length,
+    philanthropist: (chatText.match(/利他|貢献|誰かのため|役立つ|教える|協力|サポート/g) || []).length,
+    disruptor: (chatText.match(/変革|ルールを変|挑戦|違う|変わった|独自|壊す/g) || []).length
   };
   
-  // 最もカウントが多いタイプを選ぶ（デフォルトは achiever）
   let bestType = 'achiever';
   let maxCount = -1;
+  let totalCount = 0;
   for (const [type, count] of Object.entries(typeCounts)) {
+    totalCount += count;
     if (count > maxCount) {
       maxCount = count;
       bestType = type;
@@ -420,11 +477,25 @@ $('#btn-chat-finish').addEventListener('click', () => {
   // 判定できなかった場合
   if (maxCount === 0) bestType = 'achiever';
 
+  // より正確なスコアを計算
+  const calculatedScores = {};
+  for (const type of Object.keys(typeCounts)) {
+    if (totalCount === 0) {
+      calculatedScores[type] = (type === bestType) ? 70 : 30; // デフォルトスコア
+    } else {
+      // ベーススコア20、最大100として分布を計算
+      const percentage = typeCounts[type] / totalCount;
+      calculatedScores[type] = Math.min(100, Math.round(20 + (percentage * 80)));
+    }
+  }
+
   appState.hexadResult = {
     primaryType: bestType,
-    scores: { achiever: 50, player: 50, socialiser: 50, freeSpirit: 50, philanthropist: 50, disruptor: 50 },
-    rationale: 'AIの会話内容から推測してタイプを判定しました。'
+    scores: calculatedScores,
+    rationale: '会話内容から各要素の強さを推測しました。'
   };
+  
+  $('#result-fallback-note').style.display = 'block';
   renderResult(appState.hexadResult);
   showScreen('screen-result');
 });
@@ -460,7 +531,14 @@ async function handleChatSend() {
       let errMsg = `サーバーエラー (${res.status})`;
       try {
         const errorData = await res.json();
-        if (errorData.error) errMsg += `: ${errorData.error}`;
+        if (errorData.error) {
+          // エラーメッセージが長すぎる・複雑すぎる場合の整理（特にGemini/Difyの429エラーなど）
+          if (typeof errorData.error === 'string' && errorData.error.includes('RESOURCE_EXHAUSTED')) {
+            errMsg = '現在AIの利用制限（上限）に達しているため、回答できません。少し待ってから再度お試しいただくか、「会話を終了してゲームを始める」ボタンから簡易診断に進んでください。';
+          } else {
+            errMsg += `: ${errorData.error}`;
+          }
+        }
       } catch (e) {}
       throw new Error(errMsg);
     }
@@ -493,7 +571,10 @@ async function handleChatSend() {
     }
   } catch (err) {
     if(container.contains(loadingDiv)) container.removeChild(loadingDiv);
-    appendChatMessage('ai', 'エラーが発生しました: ' + err.message);
+    
+    // 既に親切なメッセージになっている場合はそのまま、それ以外はデフォルト
+    const userFriendlyMsg = err.message.includes('現在AIの利用制限') ? err.message : 'エラーが発生しました: ' + err.message;
+    appendChatMessage('ai', userFriendlyMsg);
   } finally {
     isChatting = false;
     $('#btn-chat-send').disabled = !input.value.trim();

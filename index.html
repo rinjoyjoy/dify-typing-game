@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>タイプ適応型タイピングゲーム（研究用プロトタイプ）</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <div id="app">
@@ -29,7 +29,7 @@
         <!-- チャット履歴がここに追加される -->
       </div>
       <div class="chat-input-area">
-        <input type="text" id="chat-input" placeholder="メッセージを入力..." autocomplete="off">
+        <textarea id="chat-input" rows="2" placeholder="メッセージを入力..." autocomplete="off"></textarea>
         <button id="btn-chat-send" class="btn btn-primary" disabled>送信</button>
       </div>
       <div class="button-row" style="margin-top: 1rem;">
