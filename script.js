@@ -1692,7 +1692,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initWelcomeScreen();
   fetchStatsFromVercelDb();
   
-  // 隠しコマンド（けんきゅうでーた）でエクスポート画面を表示
+  // 隠しコマンド処理
   let secretBuffer = '';
   document.addEventListener('keydown', (e) => {
     // 制御キーなどは無視（ただしIME入力のProcessは許可）
@@ -1701,11 +1701,17 @@ document.addEventListener('DOMContentLoaded', () => {
     secretBuffer += e.key;
     if (secretBuffer.length > 30) secretBuffer = secretBuffer.slice(-30);
     
-    // ローマ字入力、または直接入力の両方に対応
+    // 隠しコマンド1: けんきゅうでーた (エクスポート画面表示)
     if (secretBuffer.endsWith('kenkyuude-ta') || secretBuffer.endsWith('けんきゅうでーた')) {
       const exportUi = $('#secret-export-ui');
       exportUi.style.display = 'block';
       exportUi.scrollIntoView({ behavior: 'smooth' });
+      secretBuffer = ''; // リセット
+    }
+
+    // 隠しコマンド2: FORM (Googleフォームを開く)
+    if (secretBuffer.toUpperCase().endsWith('FORM')) {
+      window.open('https://forms.gle/CZLPNUX4T4yoJBmg8', '_blank');
       secretBuffer = ''; // リセット
     }
   });
