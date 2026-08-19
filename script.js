@@ -15,6 +15,14 @@ const HEXAD_TYPES = {
   disruptor:      { label: '変革者 (Disruptor)',       color: '#e34948', desc: '既存の仕組みに挑戦し、変化を起こすことを好むタイプ。' },
 };
 
+function updateThemeColor() {
+  if (appState && appState.hexadResult && appState.hexadResult.primaryType) {
+    const t = appState.hexadResult.primaryType;
+    const color = (appState.setup && appState.setup.avatarColor) ? appState.setup.avatarColor : HEXAD_TYPES[t].color;
+    document.documentElement.style.setProperty('--theme-color', color);
+  }
+}
+
 const LIKERT_LABELS = ['そう思わない', 'ややそう\n思わない', 'どちらとも\n言えない', 'やや\nそう思う', 'そう思う'];
 
 const CATEGORY_LABELS = { daily: '日常', nature: '自然', motivation: '名言・前向き', proverb: 'ことわざ' };
@@ -363,6 +371,104 @@ const DEFAULT_STATS = {
 };
 
 /* ============================================================
+   タイピング練習のクリア/非クリア判定（タイプ別明確な成果判定）
+   ============================================================ */
+function evaluateClearStatus(result, type) {
+  // 難易度と制限時間の取得
+  const diff = appState.setup.difficulty || 'random';
+  const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
+  
+  // 1. CPMの目標値（難易度で変動）
+  let targetCpm = 150;
+  if (diff === 'short') targetCpm = 120;
+  if (diff === 'long') targetCpm = 180;
+
+  // 2. 文字数の目標値（制限時間で変動）
+  let targetChars = 100;
+  if (timeLimit) {
+    targetChars = Math.floor(timeLimit * 1.5); // 例: 60秒なら90文字
+  }
+
+  // 3. 文数の目標値
+  const targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
+
+  switch (type) {
+    case 'achiever':
+      // 達成者: 難易度別CPM目標 ＆ 正確率90%以上
+      const isAchieverCleared = result.cpm >= targetCpm && result.accuracy >= 90;
+      return {
+        cleared: isAchieverCleared,
+        title: isAchieverCleared ? '🎉 STAGE CLEAR (目標達成!)' : '❌ FAILED (クリアならず...)',
+        desc: isAchieverCleared 
+          ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！` 
+          : `目標基準: ${targetCpm} CPM & 正確率90% 以上 (今回: ${result.cpm} CPM / 正確率 ${result.accuracy}%)`
+      };
+      
+    case 'player':
+      // プレイヤー: 制限時間に応じた文字数(コイン)を獲得
+      const isPlayerCleared = result.correctKeystrokes >= targetChars;
+      return {
+        cleared: isPlayerCleared,
+        title: isPlayerCleared ? '🪙 CLEAR (ノルマ達成!)' : '❌ FAILED (獲得目標 未達)',
+        desc: isPlayerCleared 
+          ? `ノルマ達成！ +${result.correctKeystrokes + 20} コインを獲得しました！` 
+          : `目標ノルマ: ${targetChars}文字(コイン)以上を入力 (今回: ${result.correctKeystrokes}文字)`
+      };
+      
+    case 'socialiser':
+      // 社交家: 難易度別CPM以上(ランク基準相当)
+      const isSocialiserCleared = result.cpm >= targetCpm;
+      return {
+        cleared: isSocialiserCleared,
+        title: isSocialiserCleared ? '🎖️ CLEAR (目標ランク突破!)' : '❌ FAILED (ランク未達)',
+        desc: isSocialiserCleared 
+          ? `目標ランク基準(${targetCpm}CPM)を突破しました！` 
+          : `目標ランク基準: ${targetCpm} CPM以上 (今回: ${result.cpm} CPM)`
+      };
+
+    case 'disruptor':
+      // 変革者: 制限時間に応じたスコアを獲得
+      const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
+      const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
+      const targetScore = timeLimit ? timeLimit * 2 : 150;
+      const isDisruptorCleared = score >= targetScore;
+      return {
+        cleared: isDisruptorCleared,
+        title: isDisruptorCleared ? '⚡ CLEAR (特殊ルール突破!)' : '❌ FAILED (スコア目標未達)',
+        desc: isDisruptorCleared 
+          ? `ルール「${rule.label}」で ${score} pt を獲得し、クリアしました！` 
+          : `クリア目標: ${targetScore} pt 以上 (今回: ${score} pt)`
+      };
+      
+    case 'philanthropist':
+      // 利他主義者: 制限時間に応じた文字数を貢献
+      const targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
+      const isPhilCleared = result.correctKeystrokes >= targetPhilChars;
+      return {
+        cleared: isPhilCleared,
+        title: isPhilCleared ? '💚 CLEAR (貢献達成!)' : '❌ FAILED (貢献未達)',
+        desc: isPhilCleared 
+          ? `みんなの練習目標に ${result.correctKeystrokes} 文字貢献しました！` 
+          : `目標: ${targetPhilChars}文字以上の貢献 (今回: ${result.correctKeystrokes}文字)`
+      };
+
+    case 'freeSpirit':
+    default:
+      // 自由人: 時間に応じた完了文数
+      const isFreeCleared = result.sentencesCompleted >= targetSentences;
+      return {
+        cleared: isFreeCleared,
+        title: isFreeCleared ? '🌟 CLEAR (探求完了!)' : '❌ FAILED (未完了)',
+        desc: isFreeCleared 
+          ? `目標の ${targetSentences} 文以上をやり遂げました！` 
+          : `目標: ${targetSentences} 文以上タイピングを完了 (今回: ${result.sentencesCompleted}文)`
+      };
+  }
+}
+
+
+
+/* ============================================================
    かな → ローマ字 変換エンジン
    ============================================================ */
 
@@ -465,6 +571,48 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+/* ============================================================
+   Vercel Postgres (DB) 通信処理
+   ============================================================ */
+async function saveSessionToVercelDb(record) {
+  try {
+    const res = await fetch('/api/save-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record)
+    });
+    if (res.ok) {
+      console.log('Vercel DBへプレイ記録を正常に保存しました');
+    }
+  } catch (e) {
+    console.warn('Vercel DB保存エラー:', e);
+  }
+}
+
+async function fetchStatsFromVercelDb() {
+  try {
+    const res = await fetch('/api/get-stats');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        const stats = getStats();
+        if (data.communityTotal > stats.communityTotal) {
+          stats.communityTotal = data.communityTotal;
+        }
+        if (data.leaderboard && data.leaderboard.length) {
+          const mergedMap = new Map();
+          [...stats.leaderboard, ...data.leaderboard.map(r => ({ name: r.nickname, cpm: r.cpm, accuracy: r.accuracy, date: r.created_at }))]
+            .forEach(item => mergedMap.set(`${item.name}_${item.cpm}_${item.accuracy}`, item));
+          stats.leaderboard = Array.from(mergedMap.values()).sort((a, b) => b.cpm - a.cpm).slice(0, 20);
+        }
+        saveStats(stats);
+      }
+    }
+  } catch (e) {
+    console.warn('Vercel DB取得エラー:', e);
+  }
+}
+
 function getStats() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.stats);
@@ -554,17 +702,12 @@ function appendChatMessage(role, text) {
   msgDiv.className = `chat-message ${role}`;
   
   if (role === 'ai') {
-    // 選択肢（1. xxx 2. xxx）を抽出してボタンにする処理
-    // 例: "1. 〇〇" のように始まり、改行またはスペースで区切られるパターン
     let formattedText = escapeHtml(text);
-    
-    // 単純な番号付きリスト（1. xxx \n 2. xxx）を探す
     const choiceRegex = /(\d+)[\.\、]\s*([^\n\d]+)/g;
     let match;
     let hasChoices = false;
     let choicesHtml = '';
     
-    // もし改行等で区切られた明確な選択肢フォーマットなら、ボタンに変換する
     if (text.includes('1.') || text.includes('1、')) {
       const lines = text.split('\n');
       let mainText = [];
@@ -575,7 +718,6 @@ function appendChatMessage(role, text) {
         if (m) {
           buttons.push(m[2].trim());
         } else {
-          // 同じ行の中に「1. xxx 2. xxx」と連続しているパターン
           const inlineMatches = [...line.matchAll(/(\d+)[\.\、]\s*([^1-9]+)(?=\d+[\.\、]|$)/g)];
           if (inlineMatches.length > 1) {
             inlineMatches.forEach(im => buttons.push(im[2].trim()));
@@ -620,8 +762,6 @@ function appendChatMessage(role, text) {
       msgDiv.innerHTML = text.replace(/\n/g, '<br>');
     }
     
-    // AIのメッセージに「完了」「準備」などのキーワードが含まれていたら、
-    // チャット内にも目立つように「ゲームを始める」ボタンを追加する
     if (text.includes('完了') || text.includes('準備') || text.includes('ゲームを始め')) {
       const finishContainer = document.createElement('div');
       finishContainer.style.marginTop = '16px';
@@ -633,7 +773,7 @@ function appendChatMessage(role, text) {
       finishBtn.style.fontWeight = 'bold';
       finishBtn.textContent = '🎲 タイピングゲームを始める';
       finishBtn.onclick = () => {
-        $('#btn-chat-finish').click(); // 既存の終了処理を呼び出す
+        $('#btn-chat-finish').click();
       };
       finishContainer.appendChild(finishBtn);
       msgDiv.appendChild(finishContainer);
@@ -644,7 +784,6 @@ function appendChatMessage(role, text) {
   
   container.appendChild(msgDiv);
   
-  // メッセージが長くて画面に収まらない場合は先頭から読めるようにする
   if (msgDiv.offsetHeight > container.clientHeight * 0.6) {
     container.scrollTo({ top: msgDiv.offsetTop - 20, behavior: 'smooth' });
   } else {
@@ -673,11 +812,9 @@ $('#btn-chat-finish').addEventListener('click', async () => {
   const btn = $('#btn-chat-finish');
   const originalText = btn.textContent;
   
-  // 分析中画面を表示
   showScreen('screen-analyzing');
   
   try {
-    // これまでの会話内容をテキストとして取得
     const chatText = $('#chat-messages').innerText || '';
     const finalPrompt = `以下の会話履歴を分析し、ユーザーのHexadゲーミフィケーションタイプを診断してください。
 必ず以下のJSON形式のみを出力してください（挨拶やJSON以外のテキストは一切含めないでください）。
@@ -686,7 +823,6 @@ $('#btn-chat-finish').addEventListener('click', async () => {
 【会話履歴】
 ${chatText}`;
 
-    // 内部的にDifyへ最終診断をリクエストする（会話IDをリセットして新規タスクとして実行）
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -707,7 +843,6 @@ ${chatText}`;
         try {
           const result = JSON.parse(jsonStr);
           if (result.primaryType) {
-            // scoresが存在しない場合（LLMが省略した場合など）はダミーを入れる
             if (!result.scores) {
               result.scores = { achiever: 0, player: 0, socialiser: 0, freeSpirit: 0, philanthropist: 0, disruptor: 0 };
               result.scores[result.primaryType] = 100;
@@ -717,7 +852,7 @@ ${chatText}`;
             $('#result-fallback-note').style.display = 'none';
             renderResult(result);
             showScreen('screen-result');
-            return; // 成功
+            return;
           }
         } catch (e) {
           console.error("JSON Parse error:", e, "Raw output:", jsonStr);
@@ -733,7 +868,6 @@ ${chatText}`;
     btn.textContent = originalText;
   }
 
-  // Difyからの取得に失敗した場合はキーワードカウントによるフォールバックを使用
   const chatText = $('#chat-messages').innerText || '';
   
   const typeCounts = {
@@ -756,16 +890,13 @@ ${chatText}`;
     }
   }
 
-  // 判定できなかった場合
   if (maxCount === 0) bestType = 'achiever';
 
-  // より正確なスコアを計算
   const calculatedScores = {};
   for (const type of Object.keys(typeCounts)) {
     if (totalCount === 0) {
-      calculatedScores[type] = (type === bestType) ? 70 : 30; // デフォルトスコア
+      calculatedScores[type] = (type === bestType) ? 70 : 30;
     } else {
-      // ベーススコア20、最大100として分布を計算
       const percentage = typeCounts[type] / totalCount;
       calculatedScores[type] = Math.min(100, Math.round(20 + (percentage * 80)));
     }
@@ -793,7 +924,6 @@ async function handleChatSend() {
   $('#btn-chat-send').disabled = true;
   isChatting = true;
   
-  // Loading indicator for AI
   const container = $('#chat-messages');
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'chat-message ai loading';
@@ -815,7 +945,6 @@ async function handleChatSend() {
       try {
         const errorData = await res.json();
         if (errorData.error) {
-          // エラーメッセージが長すぎる・複雑すぎる場合の整理（特にGemini/Difyの429エラーなど）
           if (typeof errorData.error === 'string' && errorData.error.includes('RESOURCE_EXHAUSTED')) {
             errMsg = '現在AIの利用制限（上限）に達しているため、回答できません。少し待ってから再度お試しいただくか、「会話を終了してゲームを始める」ボタンから簡易診断に進んでください。';
           } else {
@@ -831,11 +960,9 @@ async function handleChatSend() {
     
     const answerText = data.answer || '';
     
-    // Check if JSON result is embedded in the response
     const jsonMatch = answerText.match(/\{[\s\S]*"primaryType"[\s\S]*\}/);
     
     if (jsonMatch) {
-      // JSON found! Diagnosis is complete.
       let cleanText = answerText.replace(jsonMatch[0], '').trim();
       if (cleanText) appendChatMessage('ai', cleanText);
       
@@ -846,7 +973,7 @@ async function handleChatSend() {
         setTimeout(() => {
           renderResult(result);
           showScreen('screen-result');
-        }, 1500); // Wait a bit before transition
+        }, 1500);
       } catch(e) {
         appendChatMessage('ai', '判定結果の解析に失敗しました。もう一度教えていただけますか？');
       }
@@ -856,7 +983,6 @@ async function handleChatSend() {
   } catch (err) {
     if(container.contains(loadingDiv)) container.removeChild(loadingDiv);
     
-    // 既に親切なメッセージになっている場合はそのまま、それ以外はデフォルト
     const userFriendlyMsg = err.message.includes('現在AIの利用制限') ? err.message : 'エラーが発生しました: ' + err.message;
     appendChatMessage('ai', userFriendlyMsg);
   } finally {
@@ -871,6 +997,7 @@ async function handleChatSend() {
    ============================================================ */
 
 function renderResult(result) {
+  updateThemeColor();
   const type = HEXAD_TYPES[result.primaryType];
   const badge = $('#result-badge');
   badge.style.background = type.color;
@@ -910,6 +1037,7 @@ $('#btn-rediagnose').addEventListener('click', () => {
    ============================================================ */
 
 function renderSetup() {
+  updateThemeColor();
   const type = appState.hexadResult.primaryType;
   const stats = getStats();
   $('#setup-title').textContent = `練習の準備 — ${HEXAD_TYPES[type].label}`;
@@ -1120,7 +1248,6 @@ function shuffle(arr) {
   return a;
 }
 
-// 1回のプレイ(セッション)では、制限時間内または手動終了まで複数の文を連続して出題する。
 function createSession(pool, timeLimitSec) {
   const session = {
     pool,
@@ -1141,6 +1268,14 @@ function loadNextSentence(session) {
   session.idx = 0;
   session.buffer = '';
   session.committed = [];
+  
+  session.isBonusSentence = false;
+  if (appState && appState.hexadResult) {
+    const t = appState.hexadResult.primaryType;
+    if ((t === 'freeSpirit' || t === 'disruptor') && Math.random() < 0.20) {
+      session.isBonusSentence = true;
+    }
+  }
 }
 
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
@@ -1188,7 +1323,10 @@ function processChar(ch) {
     game.buffer = '';
     if (game.idx >= game.moras.length) {
       game.sentencesCompleted++;
-      triggerSentenceCompleteEffect();
+      if (game.isBonusSentence) {
+        game.totalCorrect += 30;
+      }
+      triggerSentenceCompleteEffect(game.isBonusSentence);
       loadNextSentence(game);
     }
   } else if (mora.options.some((c) => c.startsWith(tentative))) {
@@ -1204,7 +1342,15 @@ function processChar(ch) {
 }
 
 function renderGame() {
-  $('#game-kanji').textContent = game.sentence.kanji;
+  updateThemeColor();
+  const sentenceEl = $('#game-sentence');
+  if (game.isBonusSentence) {
+    sentenceEl.classList.add('bonus-sentence');
+    $('#game-kanji').innerHTML = `✨ <span style="color:#eda100">${game.sentence.kanji}</span> ✨`;
+  } else {
+    sentenceEl.classList.remove('bonus-sentence');
+    $('#game-kanji').textContent = game.sentence.kanji;
+  }
   $('#game-reading').textContent = game.sentence.reading;
   const parts = game.moras.map((m, i) => {
     if (i < game.idx) return `<span class="rj-done">${game.committed[i]}</span>`;
@@ -1220,18 +1366,25 @@ function renderGame() {
   renderSidePanel();
 }
 
-function triggerSentenceCompleteEffect() {
+function triggerSentenceCompleteEffect(isBonus = false) {
   const el = $('#game-sentence');
   el.classList.remove('sentence-complete-flash');
-  void el.offsetWidth; // 再生中でも即座にアニメーションを再スタートさせる
+  void el.offsetWidth;
   el.classList.add('sentence-complete-flash');
   setTimeout(() => el.classList.remove('sentence-complete-flash'), 600);
 
   const pop = document.createElement('div');
-  pop.className = 'complete-pop';
-  pop.textContent = '✓';
+  pop.textContent = isBonus ? '✨ BONUS! +30 ✨' : '+1';
+  pop.style.position = 'absolute';
+  pop.style.top = '10px';
+  pop.style.right = '20px';
+  pop.style.color = isBonus ? '#eda100' : 'var(--theme-color, #2a78d6)';
+  pop.style.fontWeight = 'bold';
+  pop.style.fontSize = isBonus ? '1.5rem' : '1.2rem';
+  pop.style.pointerEvents = 'none';
+  pop.style.animation = 'floatUp 0.8s ease forwards';
   el.appendChild(pop);
-  setTimeout(() => pop.remove(), 700);
+  setTimeout(() => pop.remove(), 800);
 }
 
 function currentElapsedSec() { return game.startTime ? (Date.now() - game.startTime) / 1000 : 0; }
@@ -1282,7 +1435,6 @@ function barRow(label, pct, value, color) {
 }
 
 function computeScore(cpm, acc, totalChars) { 
-  // 以前の直線的な減点幅（acc / 100）に戻しつつ、入力数（totalChars）を掛け合わせて早期終了のスコア跳ね上がりを防止
   return Math.round((totalChars * cpm * acc) / 1000); 
 }
 
@@ -1372,7 +1524,7 @@ function finishSession() {
    ============================================================ */
 
 function onGameFinished(result) {
-  const type = appState.hexadResult.primaryType;
+  const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
   const stats = getStats();
   stats.sessionsCompleted++;
   stats.totalCorrectChars += result.correctKeystrokes;
@@ -1388,12 +1540,12 @@ function onGameFinished(result) {
 
   saveStats(stats);
 
-  appendLog({
+  const sessionLogRecord = {
     timestamp: new Date().toISOString(),
     nickname: appState.nickname,
     hexadType: type,
-    hexadScores: appState.hexadResult.scores,
-    classifyMethod: appState.hexadResult.method,
+    hexadScores: appState.hexadResult ? appState.hexadResult.scores : null,
+    classifyMethod: appState.hexadResult ? appState.hexadResult.method : 'rule',
     sentenceCategory: appState.setup.category,
     difficulty: appState.setup.difficulty,
     timeLimitSec: game.timeLimitSec,
@@ -1404,13 +1556,31 @@ function onGameFinished(result) {
     mistakes: result.mistakes,
     correctKeystrokes: result.correctKeystrokes,
     setupSnapshot: JSON.stringify(appState.setup),
-  });
+  };
+
+  appendLog(sessionLogRecord);
+
+  // Vercel Postgres DBへ非同期保存
+  saveSessionToVercelDb(sessionLogRecord);
 
   renderPostgame(result, stats, newUnlocks);
   showScreen('screen-postgame');
 }
 
 function renderPostgame(result, stats, newUnlocks) {
+  const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
+  
+  // 明確な クリア / 非クリア 判定バナーの描画
+  const clearStatus = evaluateClearStatus(result, type);
+  const bannerEl = $('#clear-status-banner');
+  if (bannerEl) {
+    bannerEl.className = `clear-banner ${clearStatus.cleared ? 'cleared' : 'failed'}`;
+    bannerEl.innerHTML = `
+      <div class="clear-title">${clearStatus.title}</div>
+      <div class="clear-desc">${clearStatus.desc}</div>
+    `;
+  }
+
   $('#postgame-stats').innerHTML = `
     <div class="stat-tile"><div class="stat-value">${result.elapsedSec.toFixed(1)}秒</div><div class="stat-label">タイム</div></div>
     <div class="stat-tile"><div class="stat-value">${result.cpm}</div><div class="stat-label">文字/分</div></div>
@@ -1418,7 +1588,6 @@ function renderPostgame(result, stats, newUnlocks) {
     <div class="stat-tile"><div class="stat-value">${result.sentencesCompleted}</div><div class="stat-label">完了した文</div></div>
   `;
 
-  const type = appState.hexadResult.primaryType;
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
   $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks);
 
@@ -1521,6 +1690,7 @@ $('#btn-clear-log').addEventListener('click', () => {
 
 document.addEventListener('DOMContentLoaded', () => {
   initWelcomeScreen();
+  fetchStatsFromVercelDb();
   
   // 隠しコマンド（けんきゅうでーた）でエクスポート画面を表示
   let secretBuffer = '';

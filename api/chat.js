@@ -1,4 +1,4 @@
-﻿export default async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -20,9 +20,11 @@
       inputs: {}, // プロンプトやシステム指示はDify側の管理画面で設定してください
       query: message,
       response_mode: "blocking",
-      conversation_id: conversation_id || "",
       user: "typing-game-user"
     };
+    if (conversation_id) {
+      requestBody.conversation_id = conversation_id;
+    }
 
     const response = await fetch(DIFY_API_URL, {
       method: 'POST',

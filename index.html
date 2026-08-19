@@ -15,7 +15,7 @@
     <section id="screen-welcome" class="screen active">
       <div class="card">
         <h1>カスタムタイピング</h1>
-        <div class="button-row" style="flex-direction: column; gap: 10px;">
+        <div class="button-row" style="flex-direction: column; gap: 10px; margin-top: 15px;">
           <button id="btn-start-survey-llm" class="btn btn-primary">タイプ診断を始める</button>
           <button id="btn-resume-session" class="btn btn-secondary" style="display:none;">前回の続きから始める</button>
           <button id="btn-reset-welcome" class="btn btn-danger" style="display:none;">データをリセットして最初から</button>
@@ -96,6 +96,7 @@
     <!-- ============ 6. ゲーム結果 ============ -->
     <section id="screen-postgame" class="screen">
       <div class="card">
+        <div id="clear-status-banner" class="clear-banner"></div>
         <h2>結果</h2>
         <div id="postgame-stats" class="stats-grid"></div>
         <div id="postgame-gamification" class="gamification-box"></div>

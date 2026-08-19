@@ -117,7 +117,7 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
 }
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-primary { background: var(--type-achiever); color: #fff; }
+.btn-primary { background: var(--theme-color, var(--type-achiever)); color: #fff; }
 .btn-secondary { background: var(--gridline); color: var(--text-primary); }
 .btn-tertiary { background: transparent; color: var(--text-secondary); border: 1px solid var(--baseline); }
 .btn-danger { background: transparent; color: var(--critical); border: 1px solid var(--critical); }
@@ -195,9 +195,20 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
 .game-reading { font-size: 0.95rem; color: var(--text-muted); margin-bottom: 18px; }
 .game-romaji { font-size: 1.6rem; font-family: "SFMono-Regular", Consolas, Menlo, monospace; letter-spacing: 0.03em; border-radius: 6px; }
 .rj-done { color: var(--good); }
-.rj-current { color: #fff; background: var(--type-achiever); border-radius: 4px; padding: 0 2px; }
+.rj-current { color: #fff; background: var(--theme-color, var(--type-achiever)); border-radius: 4px; padding: 0 2px; }
 .rj-pending { color: var(--text-muted); }
 .rj-bonus { text-decoration: underline wavy var(--warning); }
+
+.bonus-sentence {
+  background: linear-gradient(135deg, rgba(237,161,0,0.1), rgba(250,178,25,0.2)) !important;
+  border: 1px solid #eda100;
+  box-shadow: 0 0 15px rgba(237,161,0,0.2);
+  animation: pulse-bonus 2s infinite alternate;
+}
+@keyframes pulse-bonus {
+  from { box-shadow: 0 0 5px rgba(237,161,0,0.1); }
+  to { box-shadow: 0 0 20px rgba(237,161,0,0.4); }
+}
 
 .game-romaji.mistake-flash { animation: mistakeShake .3s ease, mistakeFlashBg .3s ease; }
 @keyframes mistakeShake {
@@ -322,3 +333,49 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
   font-size: 1rem;
   margin: 0;
 }
+
+/* ============================================================
+   クリア / 非クリア 判定バナー（寿司打風 明確な成果判定）
+   ============================================================ */
+.clear-banner {
+  padding: 16px 20px;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.clear-banner.cleared {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  border: 2px solid #34d399;
+}
+
+.clear-banner.failed {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+  border: 2px solid #f87171;
+}
+
+.clear-title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  margin: 0 0 6px 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.clear-desc {
+  font-size: 1rem;
+  opacity: 0.95;
+  margin: 0;
+  font-weight: 600;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+
