@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>カスタムタイピングゲーム（診断なし版）</title>
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- ============ 0. ゲーム設定（achiever固定） ============ -->
+    <section id="screen-setup" class="screen active">
+      <div class="card">
+        <h1>カスタムタイピング</h1>
+        <h2 id="setup-title">練習の準備</h2>
+        <div id="setup-body"></div>
+        <div class="button-row">
+          <button id="btn-start-game" class="btn btn-primary">スタート</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1. タイピング画面 ============ -->
+    <section id="screen-game" class="screen">
+      <div class="card">
+        <div id="game-hud" class="game-hud"></div>
+
+        <div id="game-sentence" class="game-sentence">
+          <div id="game-kanji" class="game-kanji"></div>
+          <div id="game-reading" class="game-reading"></div>
+          <div id="game-romaji" class="game-romaji"></div>
+        </div>
+
+        <div id="game-side-panel" class="game-side-panel"></div>
+
+        <div class="button-row">
+          <button id="btn-end-session" class="btn btn-tertiary">終了して結果を見る</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2. ゲーム結果 ============ -->
+    <section id="screen-postgame" class="screen">
+      <div class="card">
+        <div id="clear-status-banner" class="clear-banner"></div>
+        <h2>結果</h2>
+        <div id="postgame-stats" class="stats-grid"></div>
+        <div id="postgame-gamification" class="gamification-box"></div>
+
+        <div class="button-row">
+          <button id="btn-play-again" class="btn btn-primary">もう一度プレイ</button>
+          <button id="btn-back-setup" class="btn btn-secondary">設定に戻る</button>
+        </div>
+
+        <details class="export-details" id="secret-export-ui" style="display: none;">
+          <summary>研究データのエクスポート</summary>
+          <p class="hint">この端末に保存されたセッション記録（<span id="log-count">0</span>件）を書き出します。</p>
+          <div class="button-row">
+            <button id="btn-export-json" class="btn btn-tertiary">JSONで書き出す</button>
+            <button id="btn-export-csv" class="btn btn-tertiary">CSVで書き出す</button>
+            <button id="btn-clear-log" class="btn btn-danger">記録を削除</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </div>
+  <script src="survey-data.js"></script>
+  <script src="script-no-diagnosis.js"></script>
+</body>
+
+</html>
