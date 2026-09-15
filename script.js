@@ -1315,6 +1315,25 @@ $('#btn-goto-setup').addEventListener('click', () => {
   showScreen('screen-setup');
 });
 
+// 制限時間いっぱいまでプレイし切ったセッションが3回続いたら、タイプ診断のやり直しを提案する
+// （途中で切り上げたセッションはカウントしない）。設定画面・結果画面のどちらでも表示されうる
+// （「もう一度プレイ」を連打して設定画面に戻らないユーザーでも見逃さないように）。
+// 提案を無視してそのまま次のプレイを始めたら、提案は一旦消えてカウントをリセットする（毎回しつこく出さないように）。
+function buildRediagnosePromptHtml(stats, buttonId) {
+  const show = (stats.fullTimeStreak || 0) >= 3;
+  if (!show) return '';
+  if (!stats.rediagnosePromptShown) {
+    stats.rediagnosePromptShown = true;
+    saveStats(stats);
+  }
+  return `
+    <div class="setup-row rediagnose-prompt">
+      <p class="hint">3回、時間いっぱいプレイしました。今のあなたに合ったタイプか、診断をやり直してみませんか？</p>
+      <button type="button" id="${buttonId}" class="btn btn-tertiary">🔄 タイプ診断をやり直す</button>
+    </div>
+  `;
+}
+
 // 設定画面から呼ばれる、タイプ診断のやり直し（制限時間いっぱいのプレイを3回終えると提案される）
 function triggerRediagnose() {
   if (confirm('現在の診断結果をリセットし、もう一度チャット診断からやり直しますか？\n（スコアや獲得コイン等の実績は維持されます）')) {
@@ -1352,24 +1371,10 @@ function renderSetup() {
   appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60', avatarColor: initialAvatarColor };
   updateThemeColor();
 
-  // 制限時間いっぱいまでプレイし切ったセッションが3回続いたら、タイプ診断のやり直しを提案する
-  // （途中で切り上げたセッションはカウントしない）。提案を無視してそのまま次のプレイを始めたら、
-  // 提案は一旦消えてカウントをリセットする（毎回しつこく出さないように）。
-  const showRediagnosePrompt = (stats.fullTimeStreak || 0) >= 3;
-  if (showRediagnosePrompt && !stats.rediagnosePromptShown) {
-    stats.rediagnosePromptShown = true;
-    saveStats(stats);
-  }
-  const rediagnosePromptHtml = showRediagnosePrompt ? `
-    <div class="setup-row rediagnose-prompt">
-      <p class="hint">3回、時間いっぱいプレイしました。今のあなたに合ったタイプか、診断をやり直してみませんか？</p>
-      <button type="button" id="btn-rediagnose-setup" class="btn btn-tertiary">🔄 タイプ診断をやり直す</button>
-    </div>
-  ` : '';
-
   // 設定・操作系はスタートボタンの上（#setup-body）、ランキングや指標等はボタンの下（#setup-stats-body）に表示する
+  const rediagnosePromptHtml = buildRediagnosePromptHtml(stats, 'btn-rediagnose-setup');
   body.innerHTML = rediagnosePromptHtml + '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
-  if (showRediagnosePrompt) {
+  if (rediagnosePromptHtml) {
     $('#btn-rediagnose-setup').addEventListener('click', triggerRediagnose);
   }
   renderSessionSettings(body.querySelector('.session-settings'), initialAvatarColor || HEXAD_TYPES[type].color);
@@ -2146,6 +2151,17 @@ function renderPostgame(result, stats, clearStatus) {
 
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
   $('#postgame-gamification').innerHTML = builders[type](result, stats) + secondaryTouchPostHtml(appState.hexadResult, stats, result);
+
+  // 「もう一度プレイ」を押すと設定画面を経由せず直接次のゲームが始まるため、
+  // タイプ診断やり直しの提案は結果画面にも出す（設定画面のみだと見逃されてしまう）
+  const rediagnoseEl = $('#postgame-rediagnose-prompt');
+  if (rediagnoseEl) {
+    const html = buildRediagnosePromptHtml(stats, 'btn-rediagnose-postgame');
+    rediagnoseEl.innerHTML = html;
+    if (html) {
+      $('#btn-rediagnose-postgame').addEventListener('click', triggerRediagnose);
+    }
+  }
 
   const pidNote = $('#participant-id-display');
   if (pidNote) {
