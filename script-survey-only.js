@@ -1430,8 +1430,9 @@ function processChar(ch) {
       return;
     }
     game.totalMistakes++;
-    // レア文はミスタイプした時点でレア扱いを取り消す
+    // レア文・ボーナス文は、ミスタイプした時点で特別扱いを取り消す（ボーナス加点も付かなくなる）
     game.isRareSentence = false;
+    game.isBonusSentence = false;
     const el = $('#game-romaji');
     el.classList.add('mistake-flash');
     setTimeout(() => el.classList.remove('mistake-flash'), 150);
