@@ -253,13 +253,16 @@ const ACHIEVER_BADGES = [
   { count: 20, name: 'マスタータイピスト' },
 ];
 
-const COIN_UNLOCKS = [
+// アバターカラーの購入価格リスト（コインを消費して購入する。AVATAR_COLORSの全色に対応）
+const COLOR_SHOP = [
   { coins: 0,    color: '#2a78d6' },
   { coins: 50,   color: '#1baf7a' },
   { coins: 150,  color: '#eda100' },
   { coins: 300,  color: '#008300' },
   { coins: 600,  color: '#4a3aa7' },
   { coins: 1000, color: '#e34948' },
+  { coins: 1500, color: '#e87ba4' },
+  { coins: 2000, color: '#eb6834' },
 ];
 
 const COMMUNITY_GOAL = 5000;
@@ -376,6 +379,8 @@ const DEFAULT_STATS = {
   targetLevel: 'standard',
   customTargetCpm: 200,
   customTargetScore: 200,
+  fullTimeStreak: 0,
+  rediagnosePromptShown: false,
 };
 
 // 目標レベル（達成者・社交家・変革者で手動調整可能。倍率で基準値を伸縮する）
@@ -447,7 +452,6 @@ const SECONDARY_TOUCH_SETUP_TEXT = {
   achiever: '🔥 連続クリアも少し記録されます',
   player: '🎁 まれにボーナスがもらえることがあります',
   socialiser: '🏅 プレイ後、記録内での順位の目安も表示されます',
-  freeSpirit: '🌟 たまに「レア文」が出てくることがあります',
   philanthropist: '💚 あなたの練習が誰かの役に立っています',
   disruptor: '⚡ たまに型破りな演出が起こることがあります',
 };
@@ -473,8 +477,6 @@ function secondaryTouchPostHtml(hexadResult, stats, result) {
   } else if (secondary === 'socialiser') {
     const info = computeGlobalRank(stats, result.cpm);
     if (info) text = `🏅 参考: 記録内で上位${info.rank}位相当`;
-  } else if (secondary === 'freeSpirit') {
-    text = '🌟 たまに「レア文」が出てくることがあります';
   } else if (secondary === 'philanthropist') {
     text = '💚 あなたの練習が誰かの役に立っています';
   } else if (secondary === 'disruptor') {
@@ -1241,16 +1243,18 @@ $('#btn-goto-setup').addEventListener('click', () => {
   showScreen('screen-setup');
 });
 
-$('#btn-rediagnose').addEventListener('click', () => {
+// 設定画面から呼ばれる、タイプ診断のやり直し（制限時間いっぱいのプレイを3回終えると提案される）
+function triggerRediagnose() {
   if (confirm('現在の診断結果をリセットし、もう一度チャット診断からやり直しますか？\n（スコアや獲得コイン等の実績は維持されます）')) {
     localStorage.removeItem(STORAGE_KEYS.hexadResult);
     appState.hexadResult = null;
     appState.nickname = 'ゲスト';
     localStorage.setItem(STORAGE_KEYS.nickname, appState.nickname);
+    const s = getStats(); s.fullTimeStreak = 0; s.rediagnosePromptShown = false; saveStats(s);
     renderSurvey();
     showScreen('screen-survey');
   }
-});
+}
 
 /* ============================================================
    4. タイプ別セットアップ画面
@@ -1278,8 +1282,26 @@ function renderSetup() {
   appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60', avatarColor: initialAvatarColor };
   updateThemeColor();
 
+  // 制限時間いっぱいまでプレイし切ったセッションが3回続いたら、タイプ診断のやり直しを提案する
+  // （途中で切り上げたセッションはカウントしない）。提案を無視してそのまま次のプレイを始めたら、
+  // 提案は一旦消えてカウントをリセットする（毎回しつこく出さないように）。
+  const showRediagnosePrompt = (stats.fullTimeStreak || 0) >= 3;
+  if (showRediagnosePrompt && !stats.rediagnosePromptShown) {
+    stats.rediagnosePromptShown = true;
+    saveStats(stats);
+  }
+  const rediagnosePromptHtml = showRediagnosePrompt ? `
+    <div class="setup-row rediagnose-prompt">
+      <p class="hint">3回、時間いっぱいプレイしました。今のあなたに合ったタイプか、診断をやり直してみませんか？</p>
+      <button type="button" id="btn-rediagnose-setup" class="btn btn-tertiary">🔄 タイプ診断をやり直す</button>
+    </div>
+  ` : '';
+
   // 設定・操作系はスタートボタンの上（#setup-body）、ランキングや指標等はボタンの下（#setup-stats-body）に表示する
-  body.innerHTML = '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
+  body.innerHTML = rediagnosePromptHtml + '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
+  if (showRediagnosePrompt) {
+    $('#btn-rediagnose-setup').addEventListener('click', triggerRediagnose);
+  }
   renderSessionSettings(body.querySelector('.session-settings'), initialAvatarColor || HEXAD_TYPES[type].color);
 
   const res = appState.hexadResult;
@@ -1400,32 +1422,47 @@ function setupAchiever(body, statsBody, stats) {
 function setupPlayer(body, statsBody, stats) {
   appState.setup.avatarColor = stats.selectedColor;
   body.innerHTML = `
-    <p class="lead">タイプするたびにコインが貯まります。コインでアバターカラーを解放しましょう。</p>
+    <p class="lead">タイプして貯めたコインで、好きなアバターカラーを購入しましょう。</p>
     <div class="setup-row">
-      <h3>アバターカラー</h3>
+      <h3>アバターカラー（クリックして購入・選択）</h3>
       <div class="color-swatch-group">
-        ${AVATAR_COLORS.map((c) => `<span class="color-swatch${stats.unlockedColors.includes(c) ? '' : ' locked'}${c === stats.selectedColor ? ' selected' : ''}" data-color="${c}" style="background:${stats.unlockedColors.includes(c) ? c : '#ccc'}; opacity:${stats.unlockedColors.includes(c) ? 1 : 0.35}"></span>`).join('')}
+        ${COLOR_SHOP.map((u) => {
+          const owned = stats.unlockedColors.includes(u.color);
+          const selected = u.color === stats.selectedColor;
+          return `
+            <div class="swatch-item">
+              <span class="color-swatch${selected ? ' selected' : ''}${owned ? '' : ' locked'}" data-color="${u.color}" data-price="${u.coins}" style="background:${owned ? u.color : '#ccc'}; opacity:${owned ? 1 : 0.45}"></span>
+              ${owned ? '' : `<span class="swatch-price">🪙${u.coins}</span>`}
+            </div>`;
+        }).join('')}
       </div>
+      <p class="hint" id="player-buy-hint" style="display:none; color: var(--critical);"></p>
     </div>
   `;
   body.querySelectorAll('.color-swatch').forEach((sw) => {
     sw.addEventListener('click', () => {
       const color = sw.dataset.color;
-      if (!stats.unlockedColors.includes(color)) return;
-      body.querySelectorAll('.color-swatch').forEach((s) => s.classList.remove('selected'));
-      sw.classList.add('selected');
-      appState.setup.avatarColor = color;
-      updateThemeColor();
-      const s = getStats(); s.selectedColor = color; saveStats(s);
+      const price = Number(sw.dataset.price);
+      const s = getStats();
+      if (!s.unlockedColors.includes(color)) {
+        if (s.coins < price) {
+          const hint = body.querySelector('#player-buy-hint');
+          if (hint) { hint.textContent = `🪙が足りません（あと ${price - s.coins} 枚必要）`; hint.style.display = 'block'; }
+          return;
+        }
+        s.coins -= price;
+        s.unlockedColors.push(color);
+      }
+      s.selectedColor = color;
+      saveStats(s);
+      renderSetup();
     });
   });
 
-  const nextUnlock = COIN_UNLOCKS.find((u) => stats.coins < u.coins);
   statsBody.innerHTML = `
     <div class="setup-row">
       <h3>所持コイン</h3>
       <p style="font-size:1.4rem;font-weight:700;">🪙 ${stats.coins}</p>
-      ${nextUnlock ? `<p class="hint">次のカラー解放まであと ${nextUnlock.coins - stats.coins} コイン</p>` : '<p class="hint">全カラーを解放済みです！</p>'}
     </div>
   `;
 }
@@ -1580,9 +1617,17 @@ $('#btn-start-game').addEventListener('click', () => startGameFlow());
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
 $('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
-$('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(); });
+$('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(false); });
 
 function startGameFlow() {
+  // 診断やり直しの提案を見たのに、やり直さずに次のプレイを始めたら、提案は消してカウントをリセットする
+  const s = getStats();
+  if (s.rediagnosePromptShown) {
+    s.fullTimeStreak = 0;
+    s.rediagnosePromptShown = false;
+    saveStats(s);
+  }
+
   const pool = buildSentencePool(appState.setup.category, appState.setup.difficulty);
   const timeLimitSec = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
   game = createSession(pool, timeLimitSec);
@@ -1607,7 +1652,7 @@ document.addEventListener('keydown', onGameKeydown);
 
 function checkTimeUp() {
   if (!game || game.endTime || game.timeLimitSec == null) return;
-  if (currentElapsedSec() >= game.timeLimitSec) finishSession();
+  if (currentElapsedSec() >= game.timeLimitSec) finishSession(true);
 }
 
 function processChar(ch) {
@@ -1639,6 +1684,8 @@ function processChar(ch) {
       return;
     }
     game.totalMistakes++;
+    // レア文はミスタイプした時点でレア扱いを取り消す
+    game.isRareSentence = false;
     const el = $('#game-romaji');
     el.classList.add('mistake-flash');
     setTimeout(() => el.classList.remove('mistake-flash'), 150);
@@ -1813,11 +1860,11 @@ function vizAchiever() {
 function vizPlayer() {
   const stats = getStats();
   const projected = stats.coins + game.totalCorrect;
-  const next = COIN_UNLOCKS.find((u) => projected < u.coins);
-  const pct = next ? (projected / next.coins) * 100 : 100;
+  const nextToBuy = COLOR_SHOP.find((u) => !stats.unlockedColors.includes(u.color) && projected < u.coins);
+  const pct = nextToBuy ? (projected / nextToBuy.coins) * 100 : 100;
   return `
     <p class="hint">🪙 このプレイでの獲得コイン: <strong>${game.totalCorrect}</strong>（合計見込み ${projected}）</p>
-    ${barRow(next ? '次の解放' : '全解放済み', pct, `${Math.round(pct)}%`, appState.setup.avatarColor || HEXAD_TYPES.player.color)}
+    ${barRow(nextToBuy ? '次に買えるカラーまで' : '全カラー購入可能', pct, `${Math.round(pct)}%`, appState.setup.avatarColor || HEXAD_TYPES.player.color)}
   `;
 }
 
@@ -1861,7 +1908,7 @@ function vizDisruptor() {
   `;
 }
 
-function finishSession() {
+function finishSession(isFullTime) {
   if (game.endTime) return;
   game.endTime = Date.now();
   if (game.hudTimer) { clearInterval(game.hudTimer); game.hudTimer = null; }
@@ -1874,14 +1921,14 @@ function finishSession() {
     mistakes: game.totalMistakes,
     correctKeystrokes: game.totalCorrect,
     sentencesCompleted: game.sentencesCompleted,
-  });
+  }, !!isFullTime);
 }
 
 /* ============================================================
    6. 結果画面 & タイプ別ゲーミフィケーション反映
    ============================================================ */
 
-function onGameFinished(result) {
+function onGameFinished(result, isFullTime) {
   const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
   const stats = getStats();
 
@@ -1894,12 +1941,33 @@ function onGameFinished(result) {
   } else {
     stats.currentStreak = 0;
   }
-  stats.bestSessionChars = Math.max(stats.bestSessionChars || 0, result.correctKeystrokes);
-  stats.bestSessionSentences = Math.max(stats.bestSessionSentences || 0, result.sentencesCompleted);
-  if (type === 'disruptor') {
+
+  // 難易度を手動調整できないタイプ（プレイヤー・自由人・利他主義者）は、
+  // クリアすれば目標が上がり、失敗すれば少し下がる（きつくなりすぎないように）。
+  // 難易度を選べるタイプ（達成者・社交家・変革者）は目標レベルで自分で調整できるため、
+  // 従来通り自己ベストに応じて上がり続けるだけにする。
+  if (type === 'player' || type === 'philanthropist') {
+    if (clearStatus.cleared) {
+      stats.bestSessionChars = Math.max(stats.bestSessionChars || 0, result.correctKeystrokes);
+    } else if ((stats.bestSessionChars || 0) > 0) {
+      stats.bestSessionChars = Math.max(0, Math.round(stats.bestSessionChars * 0.85));
+    }
+  } else if (type === 'freeSpirit') {
+    if (clearStatus.cleared) {
+      stats.bestSessionSentences = Math.max(stats.bestSessionSentences || 0, result.sentencesCompleted);
+    } else if ((stats.bestSessionSentences || 0) > 0) {
+      stats.bestSessionSentences = Math.max(0, Math.round(stats.bestSessionSentences * 0.85));
+    }
+  } else if (type === 'disruptor') {
     const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
     const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
     stats.bestDisruptorScore = Math.max(stats.bestDisruptorScore || 0, score);
+  }
+
+  // タイプ診断のやり直し提案: 制限時間いっぱいまでプレイし切ったセッションが3回続いたら
+  // 設定画面で提案する（途中で切り上げたセッションはカウントしない）
+  if (isFullTime) {
+    stats.fullTimeStreak = (stats.fullTimeStreak || 0) + 1;
   }
 
   stats.sessionsCompleted++;
@@ -1907,9 +1975,6 @@ function onGameFinished(result) {
   stats.totalPlayTimeSec += result.elapsedSec;
   stats.communityTotal += result.correctKeystrokes;
   stats.coins += result.correctKeystrokes + 20;
-
-  const newUnlocks = COIN_UNLOCKS.filter((u) => stats.coins >= u.coins && !stats.unlockedColors.includes(u.color));
-  newUnlocks.forEach((u) => stats.unlockedColors.push(u.color));
 
   stats.leaderboard.push({ name: appState.nickname, cpm: result.cpm, accuracy: result.accuracy, date: new Date().toISOString() });
   stats.leaderboard = stats.leaderboard.sort((a, b) => b.cpm - a.cpm).slice(0, 20);
@@ -1941,11 +2006,11 @@ function onGameFinished(result) {
   // Vercel Postgres DBへ非同期保存
   saveSessionToVercelDb(sessionLogRecord);
 
-  renderPostgame(result, stats, newUnlocks, clearStatus);
+  renderPostgame(result, stats, clearStatus);
   showScreen('screen-postgame');
 }
 
-function renderPostgame(result, stats, newUnlocks, clearStatus) {
+function renderPostgame(result, stats, clearStatus) {
   const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
 
   // 明確な クリア / 非クリア 判定バナーの描画
@@ -1966,7 +2031,7 @@ function renderPostgame(result, stats, newUnlocks, clearStatus) {
   `;
 
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
-  $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks) + secondaryTouchPostHtml(appState.hexadResult, stats, result);
+  $('#postgame-gamification').innerHTML = builders[type](result, stats) + secondaryTouchPostHtml(appState.hexadResult, stats, result);
 
   const pidNote = $('#participant-id-display');
   if (pidNote) {
@@ -1974,16 +2039,16 @@ function renderPostgame(result, stats, newUnlocks, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  if (stats.totalPlayTimeSec >= 600) {
-    $('#rediagnose-row').style.display = 'flex';
-  } else {
-    $('#rediagnose-row').style.display = 'none';
-  }
-
-  // アンケートへの案内は、合計15分（900秒）以上プレイしてから表示する
+  // アンケートへの案内・研究データのエクスポートは、合計15分（900秒）以上プレイしてから表示する
+  // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
+  const timeGateMet = stats.totalPlayTimeSec >= 900;
   const surveyBox = $('#survey-cta-box');
   if (surveyBox) {
-    surveyBox.style.display = stats.totalPlayTimeSec >= 900 ? 'block' : 'none';
+    surveyBox.style.display = timeGateMet ? 'block' : 'none';
+  }
+  const exportUi = $('#secret-export-ui');
+  if (exportUi && timeGateMet) {
+    exportUi.style.display = 'block';
   }
 
   $('#log-count').textContent = getLog().length;
@@ -2002,11 +2067,11 @@ function postAchiever(result, stats) {
     ${renderPersonalHistoryHtml(stats, result.cpm)}
   `;
 }
-function postPlayer(result, stats, newUnlocks) {
+function postPlayer(result, stats) {
   return `
     <h3>報酬</h3>
     <p>獲得コイン: <strong>+${result.correctKeystrokes + 20}</strong> 🪙（合計 ${stats.coins}）</p>
-    ${newUnlocks.length ? `<p class="hint" style="color:${appState.setup.avatarColor || HEXAD_TYPES.player.color}">新しいアバターカラーを解放しました！</p>` : ''}
+    <p class="hint">ショップでアバターカラーを購入できます。</p>
   `;
 }
 function postSocialiser(result, stats) {
@@ -2124,6 +2189,19 @@ function bootApp() {
       window.open(SURVEY_URL, '_blank');
       secretBuffer = '';
       secretCodeBuffer = [];
+    }
+
+    // 隠しコマンド3: KENNKYUUSYA（研究者用。この端末に保存された診断結果・プレイ履歴を全消去）
+    if (
+      secretBuffer.toUpperCase().endsWith('KENNKYUUSYA') ||
+      secretCodeBuffer.slice(-11).join(',') === 'KeyK,KeyE,KeyN,KeyN,KeyK,KeyY,KeyU,KeyU,KeyS,KeyY,KeyA'
+    ) {
+      secretBuffer = '';
+      secretCodeBuffer = [];
+      if (confirm('この端末に保存されている診断結果・プレイ履歴・実績等をすべて消去します。よろしいですか？')) {
+        localStorage.clear();
+        location.reload();
+      }
     }
   });
 }

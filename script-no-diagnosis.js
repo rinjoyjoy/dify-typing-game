@@ -989,10 +989,16 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内は、合計15分（900秒）以上プレイしてから表示する
+  // アンケートへの案内・研究データのエクスポートは、合計15分（900秒）以上プレイしてから表示する
+  // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
+  const timeGateMet = stats.totalPlayTimeSec >= 900;
   const surveyBox = $('#survey-cta-box');
   if (surveyBox) {
-    surveyBox.style.display = stats.totalPlayTimeSec >= 900 ? 'block' : 'none';
+    surveyBox.style.display = timeGateMet ? 'block' : 'none';
+  }
+  const exportUi = $('#secret-export-ui');
+  if (exportUi && timeGateMet) {
+    exportUi.style.display = 'block';
   }
 
   $('#log-count').textContent = getLog().length;
@@ -1067,6 +1073,19 @@ function bootApp() {
       window.open(SURVEY_URL, '_blank');
       secretBuffer = '';
       secretCodeBuffer = [];
+    }
+
+    // 隠しコマンド3: KENNKYUUSYA（研究者用。この端末に保存されたプレイ履歴を全消去）
+    if (
+      secretBuffer.toUpperCase().endsWith('KENNKYUUSYA') ||
+      secretCodeBuffer.slice(-11).join(',') === 'KeyK,KeyE,KeyN,KeyN,KeyK,KeyY,KeyU,KeyU,KeyS,KeyY,KeyA'
+    ) {
+      secretBuffer = '';
+      secretCodeBuffer = [];
+      if (confirm('この端末に保存されているプレイ履歴・実績等をすべて消去します。よろしいですか？')) {
+        localStorage.clear();
+        location.reload();
+      }
     }
   });
 }

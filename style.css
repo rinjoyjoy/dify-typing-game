@@ -182,9 +182,18 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
   font-size: 0.85rem; cursor: pointer; color: var(--text-secondary); background: var(--page);
 }
 .chip.selected { color: #fff; border-color: transparent; }
-.color-swatch-group { display: flex; gap: 8px; }
+.color-swatch-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+.swatch-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .color-swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
 .color-swatch.selected { border-color: var(--text-primary); }
+.swatch-price { font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; }
+.rediagnose-prompt {
+  background: color-mix(in srgb, var(--theme-color, var(--type-achiever)) 6%, var(--page));
+  border: 1px dashed var(--theme-color, var(--type-achiever));
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.rediagnose-prompt .hint { margin: 0 0 10px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gridline); }
 .toggle-row:last-child { border-bottom: none; }
 
