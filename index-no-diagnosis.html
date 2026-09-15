@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>カスタムタイピングゲーム（診断なし版）</title>
+  <title>タイピング練習</title>
   <link rel="stylesheet" href="style.css?v=2">
 </head>
 
@@ -14,7 +14,12 @@
     <!-- ============ 0. ゲーム設定（achiever固定） ============ -->
     <section id="screen-setup" class="screen active">
       <div class="card">
-        <h1>カスタムタイピング</h1>
+        <h1>タイピング練習</h1>
+        <div class="field">
+          <label for="pid-input">参加者番号</label>
+          <input type="text" id="pid-input" inputmode="numeric" pattern="[0-9]*" placeholder="事前にお伝えした番号を入力してください" autocomplete="off">
+        </div>
+        <p id="pid-error" class="hint" style="color: var(--critical); display:none;"></p>
         <h2 id="setup-title">練習の準備</h2>
         <div id="setup-body"></div>
         <div class="button-row">

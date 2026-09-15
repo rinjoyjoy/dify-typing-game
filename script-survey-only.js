@@ -558,6 +558,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
    ============================================================ */
 const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
 const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
+const DEFAULT_GROUP = 'B'; // このページ(index-survey-only.html)はB群（アンケート診断）固定
 
 function initParticipantInfo() {
   const params = new URLSearchParams(location.search);
@@ -565,17 +566,37 @@ function initParticipantInfo() {
   const groupFromUrl = params.get('group');
   if (pidFromUrl) {
     appState.participantId = pidFromUrl;
-    appState.group = groupFromUrl || appState.group;
+    appState.group = groupFromUrl || DEFAULT_GROUP;
     try { localStorage.setItem(PARTICIPANT_STORAGE_KEY, JSON.stringify({ pid: appState.participantId, group: appState.group })); } catch (e) {}
   } else {
     try {
       const saved = JSON.parse(localStorage.getItem(PARTICIPANT_STORAGE_KEY) || 'null');
       if (saved) {
         appState.participantId = saved.pid;
-        appState.group = saved.group;
+        appState.group = saved.group || DEFAULT_GROUP;
       }
     } catch (e) {}
   }
+  const pidField = $('#pid-input');
+  if (pidField && appState.participantId) pidField.value = appState.participantId;
+}
+
+// 参加者番号入力欄を検証し、appState/localStorageに保存する。未入力ならエラー表示してfalseを返す。
+function capturePidOrShowError() {
+  const input = $('#pid-input');
+  if (!input) return true; // 入力欄が無い画面では素通り
+  const errEl = $('#pid-error');
+  if (errEl) errEl.style.display = 'none';
+  const raw = input.value.trim();
+  if (!raw) {
+    if (errEl) { errEl.textContent = '参加者番号を入力してください。'; errEl.style.display = 'block'; }
+    input.focus();
+    return false;
+  }
+  appState.participantId = raw;
+  if (!appState.group) appState.group = DEFAULT_GROUP;
+  try { localStorage.setItem(PARTICIPANT_STORAGE_KEY, JSON.stringify({ pid: appState.participantId, group: appState.group })); } catch (e) {}
+  return true;
 }
 
 function showScreen(id) {
@@ -685,6 +706,7 @@ function initWelcomeScreen() {
   }
 
   $('#btn-start-survey').addEventListener('click', () => {
+    if (!capturePidOrShowError()) return;
     appState.classifyMethod = 'survey';
     appState.nickname = 'ゲスト';
     localStorage.setItem(STORAGE_KEYS.nickname, appState.nickname);
@@ -1507,7 +1529,9 @@ $('#btn-clear-log').addEventListener('click', () => {
    初期化
    ============================================================ */
 
-document.addEventListener('DOMContentLoaded', () => {
+// index.html から動的に読み込まれる場合はDOMContentLoadedが既に発火済みのため、
+// その場合は即座に初期化する。
+function bootApp() {
   initParticipantInfo();
   initWelcomeScreen();
   fetchStatsFromVercelDb();
@@ -1551,4 +1575,10 @@ document.addEventListener('DOMContentLoaded', () => {
       secretCodeBuffer = [];
     }
   });
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
+} else {
+  bootApp();
+}

@@ -4,17 +4,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>タイプ適応型タイピングゲーム（研究用プロトタイプ）</title>
+  <title>タイピング練習</title>
   <link rel="stylesheet" href="style.css?v=2">
 </head>
 
 <body>
   <div id="app">
+    <section id="screen-entry" class="screen active">
+      <div class="card">
+        <h1>タイピング練習</h1>
+        <p class="lead">はじめに、あらかじめお伝えしている「参加者番号」を入力してください。</p>
+        <div class="field">
+          <label for="pid-input">参加者番号</label>
+          <input type="text" id="pid-input" inputmode="numeric" pattern="[0-9]*" placeholder="例: 12" autocomplete="off">
+        </div>
+        <p id="pid-error" class="hint" style="color: var(--critical); display:none;"></p>
+        <div class="button-row">
+          <button id="btn-enter" class="btn btn-primary">はじめる</button>
+        </div>
+      </div>
+    </section>
+  </div>
 
+  <!-- 以下は表示されない雛形。参加者番号が確定した後に、該当する1つだけが #app に複製されます。 -->
+  <template id="tpl-group-a">
     <!-- ============ 0. ようこそ / 設定画面 ============ -->
     <section id="screen-welcome" class="screen active">
       <div class="card">
-        <h1>カスタムタイピング</h1>
+        <h1>タイピング練習</h1>
         <div class="button-row" style="flex-direction: column; gap: 10px; margin-top: 15px;">
           <button id="btn-start-survey-llm" class="btn btn-primary">タイプ診断を始める</button>
           <button id="btn-resume-session" class="btn btn-secondary" style="display:none;">前回の続きから始める</button>
@@ -127,10 +144,262 @@
         </details>
       </div>
     </section>
+  </template>
 
-  </div>
+  <template id="tpl-group-b">
+    <!-- ============ 0. ようこそ / 設定画面 ============ -->
+    <section id="screen-welcome" class="screen active">
+      <div class="card">
+        <h1>タイピング練習</h1>
+        <div class="button-row" style="flex-direction: column; gap: 10px; margin-top: 15px;">
+          <button id="btn-start-survey" class="btn btn-primary">アンケートを始める（約2分）</button>
+          <button id="btn-resume-session" class="btn btn-secondary" style="display:none;">前回の続きから始める</button>
+          <button id="btn-reset-welcome" class="btn btn-danger" style="display:none;">データをリセットして最初から</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1. アンケート画面 ============ -->
+    <section id="screen-survey" class="screen">
+      <div class="card">
+        <h2>アンケート</h2>
+        <p class="hint" style="margin-bottom: 1rem;">各項目について、あなた自身にどのくらい当てはまるかを5段階で評価してください。</p>
+        <div id="survey-form"></div>
+        <div class="button-row" style="margin-top: 1.5rem;">
+          <button id="btn-survey-submit" class="btn btn-primary" disabled>診断結果を見る</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2. 判定中 ============ -->
+    <section id="screen-analyzing" class="screen">
+      <div class="card center">
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="analyzing-text">回答を分析しています...</p>
+      </div>
+    </section>
+
+    <!-- ============ 3. 判定結果 ============ -->
+    <section id="screen-result" class="screen">
+      <div class="card">
+        <h2>あなたのゲーミフィケーションタイプ</h2>
+        <div id="result-badge" class="type-badge"></div>
+        <p id="result-rationale" class="lead"></p>
+
+        <div id="result-chart" class="bar-chart" role="img" aria-label="6タイプのスコア"></div>
+
+        <div class="button-row">
+          <button id="btn-goto-setup" class="btn btn-primary">タイピング練習へ進む</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4. ゲーム設定（タイプ別） ============ -->
+    <section id="screen-setup" class="screen">
+      <div class="card">
+        <h2 id="setup-title">練習の準備</h2>
+        <div id="setup-body"></div>
+        <div class="button-row">
+          <button id="btn-start-game" class="btn btn-primary">スタート</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5. タイピング画面 ============ -->
+    <section id="screen-game" class="screen">
+      <div class="card">
+        <div id="game-hud" class="game-hud"></div>
+
+        <div id="game-sentence" class="game-sentence">
+          <div id="game-kanji" class="game-kanji"></div>
+          <div id="game-reading" class="game-reading"></div>
+          <div id="game-romaji" class="game-romaji"></div>
+        </div>
+
+        <div id="game-side-panel" class="game-side-panel"></div>
+
+        <div class="button-row">
+          <button id="btn-end-session" class="btn btn-tertiary">終了して結果を見る</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6. ゲーム結果 ============ -->
+    <section id="screen-postgame" class="screen">
+      <div class="card">
+        <div id="clear-status-banner" class="clear-banner"></div>
+        <h2>結果</h2>
+        <div id="postgame-stats" class="stats-grid"></div>
+        <div id="postgame-gamification" class="gamification-box"></div>
+
+        <div class="survey-cta-box">
+          <p class="survey-cta-text">プレイありがとうございました！最後にアンケートへのご協力をお願いします。</p>
+          <p id="participant-id-display" class="hint" style="display:none;"></p>
+          <button id="btn-goto-survey" class="btn btn-primary">📝 アンケートに回答する</button>
+        </div>
+
+        <div class="button-row">
+          <button id="btn-play-again" class="btn btn-primary">もう一度プレイ</button>
+          <button id="btn-back-setup" class="btn btn-secondary">設定に戻る</button>
+        </div>
+
+        <div class="button-row" id="rediagnose-row" style="margin-top: 15px; display: none;">
+          <button id="btn-rediagnose" class="btn btn-tertiary">もう一度アンケートを受ける</button>
+        </div>
+
+        <details class="export-details" id="secret-export-ui" style="display: none;">
+          <summary>研究データのエクスポート</summary>
+          <p class="hint">この端末に保存されたセッション記録（<span id="log-count">0</span>件）を書き出します。</p>
+          <div class="button-row">
+            <button id="btn-export-json" class="btn btn-tertiary">JSONで書き出す</button>
+            <button id="btn-export-csv" class="btn btn-tertiary">CSVで書き出す</button>
+            <button id="btn-clear-log" class="btn btn-danger">記録を削除</button>
+          </div>
+        </details>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-group-c">
+    <!-- ============ 0. ゲーム設定（achiever固定） ============ -->
+    <section id="screen-setup" class="screen active">
+      <div class="card">
+        <h1>タイピング練習</h1>
+        <h2 id="setup-title">練習の準備</h2>
+        <div id="setup-body"></div>
+        <div class="button-row">
+          <button id="btn-start-game" class="btn btn-primary">スタート</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 1. タイピング画面 ============ -->
+    <section id="screen-game" class="screen">
+      <div class="card">
+        <div id="game-hud" class="game-hud"></div>
+
+        <div id="game-sentence" class="game-sentence">
+          <div id="game-kanji" class="game-kanji"></div>
+          <div id="game-reading" class="game-reading"></div>
+          <div id="game-romaji" class="game-romaji"></div>
+        </div>
+
+        <div id="game-side-panel" class="game-side-panel"></div>
+
+        <div class="button-row">
+          <button id="btn-end-session" class="btn btn-tertiary">終了して結果を見る</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2. ゲーム結果 ============ -->
+    <section id="screen-postgame" class="screen">
+      <div class="card">
+        <div id="clear-status-banner" class="clear-banner"></div>
+        <h2>結果</h2>
+        <div id="postgame-stats" class="stats-grid"></div>
+        <div id="postgame-gamification" class="gamification-box"></div>
+
+        <div class="survey-cta-box">
+          <p class="survey-cta-text">プレイありがとうございました！最後にアンケートへのご協力をお願いします。</p>
+          <p id="participant-id-display" class="hint" style="display:none;"></p>
+          <button id="btn-goto-survey" class="btn btn-primary">📝 アンケートに回答する</button>
+        </div>
+
+        <div class="button-row">
+          <button id="btn-play-again" class="btn btn-primary">もう一度プレイ</button>
+          <button id="btn-back-setup" class="btn btn-secondary">設定に戻る</button>
+        </div>
+
+        <details class="export-details" id="secret-export-ui" style="display: none;">
+          <summary>研究データのエクスポート</summary>
+          <p class="hint">この端末に保存されたセッション記録（<span id="log-count">0</span>件）を書き出します。</p>
+          <div class="button-row">
+            <button id="btn-export-json" class="btn btn-tertiary">JSONで書き出す</button>
+            <button id="btn-export-csv" class="btn btn-tertiary">CSVで書き出す</button>
+            <button id="btn-clear-log" class="btn btn-danger">記録を削除</button>
+          </div>
+        </details>
+      </div>
+    </section>
+  </template>
+
   <script src="survey-data.js"></script>
-  <script src="script.js"></script>
+  <script>
+    'use strict';
+    // 参加者番号を3で割った余りで3群に割り付ける。番号を送信するまでは
+    // どの群のHTML/JSも読み込まれず、URLも変わらない（配布URLは1つだけ）。
+    //   余り 1 → A群: AIチャット診断 → ゲーム → アンケート
+    //   余り 2 → B群: アンケート診断 → ゲーム → アンケート
+    //   余り 0（3の倍数） → C群: 診断なし・ゲームのみ → アンケート
+    (function () {
+      const GROUP_CONFIG = {
+        A: { template: 'tpl-group-a', script: 'script.js' },
+        B: { template: 'tpl-group-b', script: 'script-survey-only.js' },
+        C: { template: 'tpl-group-c', script: 'script-no-diagnosis.js' },
+      };
+
+      function groupForParticipant(n) {
+        const rem = n % 3;
+        if (rem === 1) return 'A';
+        if (rem === 2) return 'B';
+        return 'C'; // 3の倍数（余り0）
+      }
+
+      function qs(sel) { return document.querySelector(sel); }
+
+      function showError(msg) {
+        const err = qs('#pid-error');
+        if (!err) return;
+        err.textContent = msg;
+        err.style.display = 'block';
+      }
+
+      function enterStudy() {
+        const input = qs('#pid-input');
+        const btn = qs('#btn-enter');
+        const err = qs('#pid-error');
+        if (err) err.style.display = 'none';
+
+        const raw = input.value.trim();
+        const n = Number(raw);
+        if (!raw || !Number.isInteger(n) || n <= 0) {
+          showError('参加者番号は1以上の整数で入力してください。');
+          return;
+        }
+
+        const group = groupForParticipant(n);
+        const cfg = GROUP_CONFIG[group];
+        try {
+          localStorage.setItem('gtp_participant_meta', JSON.stringify({ pid: String(n), group }));
+        } catch (e) {}
+
+        btn.disabled = true;
+        btn.textContent = '読み込み中...';
+
+        try {
+          const tpl = document.getElementById(cfg.template);
+          const app = document.getElementById('app');
+          app.innerHTML = '';
+          app.appendChild(tpl.content.cloneNode(true));
+
+          const s = document.createElement('script');
+          s.src = cfg.script;
+          document.body.appendChild(s);
+        } catch (e) {
+          console.error(e);
+          showError('読み込みに失敗しました。ページを再読み込みしてもう一度お試しください。');
+          btn.disabled = false;
+          btn.textContent = 'はじめる';
+        }
+      }
+
+      qs('#btn-enter').addEventListener('click', enterStudy);
+      qs('#pid-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') enterStudy();
+      });
+    })();
+  </script>
 </body>
 
 </html>
