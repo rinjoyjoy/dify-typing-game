@@ -374,6 +374,8 @@ const DEFAULT_STATS = {
   bestSessionSentences: 0,
   bestDisruptorScore: 0,
   targetLevel: 'standard',
+  customTargetCpm: 200,
+  customTargetScore: 200,
 };
 
 // 目標レベル（達成者・社交家・変革者で手動調整可能。倍率で基準値を伸縮する）
@@ -383,6 +385,12 @@ const TARGET_LEVELS = {
   hard:     { label: '上級', mult: 1.3 },
   extreme:  { label: '超級', mult: 1.6 },
 };
+
+// 「カスタム」（数値を直接指定するモード）は通算5回クリア（「中級タイピスト」相当）で解放
+const CUSTOM_TARGET_UNLOCK_COUNT = 5;
+function isCustomTargetUnlocked(stats) {
+  return (stats.sessionsCompleted || 0) >= CUSTOM_TARGET_UNLOCK_COUNT;
+}
 
 // 自己ベストを上回ったら、目標値そのものを際限なく引き上げる
 function risingTarget(base, best, margin) {
@@ -485,12 +493,14 @@ function evaluateClearStatus(result, type) {
   const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
   const stats = getStats();
   const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
+  const useCustomTarget = stats.targetLevel === 'custom' && isCustomTargetUnlocked(stats);
 
-  // 1. CPMの目標値（難易度・目標レベルで変動し、自己ベストを超えるとさらに上がる）
+  // 1. CPMの目標値（難易度・目標レベルで変動し、自己ベストを超えるとさらに上がる。
+  //    「カスタム」が解放済みなら、数値を直接指定した値を基準にする）
   let targetCpm = 150;
   if (diff === 'short') targetCpm = 120;
   if (diff === 'long') targetCpm = 180;
-  targetCpm = Math.round(targetCpm * levelMult);
+  targetCpm = useCustomTarget ? Math.max(1, Math.round(Number(stats.customTargetCpm) || targetCpm)) : Math.round(targetCpm * levelMult);
   const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
   targetCpm = risingTarget(targetCpm, bestCpm, 10);
 
@@ -543,7 +553,9 @@ function evaluateClearStatus(result, type) {
       // 変革者: 制限時間・目標レベルに応じたスコアを獲得（自己ベストを超えるとさらに上がる）
       const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-      let targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * levelMult);
+      let targetScore = useCustomTarget
+        ? Math.max(1, Math.round(Number(stats.customTargetScore) || 150))
+        : Math.round((timeLimit ? timeLimit * 2 : 150) * levelMult);
       targetScore = risingTarget(targetScore, stats.bestDisruptorScore || 0, 20);
       const isDisruptorCleared = score >= targetScore;
       return {
@@ -1242,6 +1254,7 @@ function renderSetup() {
   const stats = getStats();
   $('#setup-title').textContent = `練習の準備 — ${HEXAD_TYPES[type].label}`;
   const body = $('#setup-body');
+  const statsBody = $('#setup-stats-body');
 
   const builders = {
     achiever: setupAchiever,
@@ -1252,6 +1265,10 @@ function renderSetup() {
     disruptor: setupDisruptor,
   };
   appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60' };
+
+  // 設定・操作系はスタートボタンの上（#setup-body）、ランキングや指標等はボタンの下（#setup-stats-body）に表示する
+  body.innerHTML = '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
+  renderSessionSettings(body.querySelector('.session-settings'), HEXAD_TYPES[type].color);
 
   const res = appState.hexadResult;
   let chartHtml = '';
@@ -1273,11 +1290,9 @@ function renderSetup() {
       </details>
     `;
   }
-
-  body.innerHTML = chartHtml + '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
-  renderSessionSettings(body.querySelector('.session-settings'), HEXAD_TYPES[type].color);
-  builders[type](body.querySelector('.setup-type-body'), stats);
-  body.insertAdjacentHTML('beforeend', secondaryTouchSetupHtml(appState.hexadResult));
+  statsBody.innerHTML = chartHtml + '<div class="setup-type-stats"></div>';
+  builders[type](body.querySelector('.setup-type-body'), statsBody.querySelector('.setup-type-stats'), stats);
+  statsBody.insertAdjacentHTML('beforeend', secondaryTouchSetupHtml(appState.hexadResult));
 }
 
 function renderSessionSettings(container, color) {
@@ -1311,27 +1326,54 @@ function bindChipGroup(container, name, color, onSelect) {
 }
 
 // 達成者・社交家・変革者で使う「目標レベル」の手動調整UI（自己ベスト更新でさらに上がるのは別途自動）
-function targetLevelSettingHtml(stats) {
+function targetLevelSettingHtml(stats, customFieldKey, customUnitLabel) {
+  const unlocked = isCustomTargetUnlocked(stats);
+  const options = Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label }));
+  if (unlocked) options.push({ value: 'custom', label: '🔓 カスタム' });
+  const selected = (stats.targetLevel === 'custom' && !unlocked) ? 'standard' : (stats.targetLevel || 'standard');
+  const isCustom = selected === 'custom';
+  const customValue = stats[customFieldKey] != null ? stats[customFieldKey] : 200;
   return `
     <div class="setup-row">
       <h3>目標レベル</h3>
-      ${chipGroup('targetLevel', Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label })), stats.targetLevel || 'standard')}
-      <p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>
+      ${chipGroup('targetLevel', options, selected)}
+      ${unlocked
+        ? '<p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>'
+        : `<p class="hint">🔒 通算${CUSTOM_TARGET_UNLOCK_COUNT}回クリアすると、数値を直接指定できる「カスタム」が解放されます（現在 ${stats.sessionsCompleted || 0}回）。</p>`}
+      <div class="target-custom-input" style="margin-top:10px; ${isCustom ? '' : 'display:none;'}">
+        <label for="target-custom-value" style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">目標値を直接指定（${customUnitLabel}）</label>
+        <input type="number" id="target-custom-value" min="1" step="1" value="${customValue}" style="width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--baseline); background:var(--page); color:var(--text-primary);">
+      </div>
     </div>
   `;
 }
-function bindTargetLevel(body, color) {
+function bindTargetLevel(body, color, customFieldKey) {
   bindChipGroup(body, 'targetLevel', color, (v) => {
     appState.setup.targetLevel = v;
     const s = getStats(); s.targetLevel = v; saveStats(s);
+    const box = body.querySelector('.target-custom-input');
+    if (box) box.style.display = v === 'custom' ? 'block' : 'none';
   });
+  const input = body.querySelector('#target-custom-value');
+  if (input) {
+    input.addEventListener('change', () => {
+      const val = Math.max(1, Math.round(Number(input.value) || 1));
+      input.value = val;
+      const s = getStats(); s[customFieldKey] = val; saveStats(s);
+    });
+  }
 }
 
-function setupAchiever(body, stats) {
-  const badge = ACHIEVER_BADGES.filter((b) => stats.sessionsCompleted >= b.count).pop();
-  const next = ACHIEVER_BADGES.find((b) => stats.sessionsCompleted < b.count);
+function setupAchiever(body, statsBody, stats) {
   body.innerHTML = `
     <p class="lead">達成とスキル向上を積み重ねるモードです。</p>
+    ${targetLevelSettingHtml(stats, 'customTargetCpm', 'CPM')}
+  `;
+  bindTargetLevel(body, HEXAD_TYPES.achiever.color, 'customTargetCpm');
+
+  const badge = ACHIEVER_BADGES.filter((b) => stats.sessionsCompleted >= b.count).pop();
+  const next = ACHIEVER_BADGES.find((b) => stats.sessionsCompleted < b.count);
+  statsBody.innerHTML = `
     <div class="setup-row">
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
@@ -1340,21 +1382,13 @@ function setupAchiever(body, stats) {
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
-    ${targetLevelSettingHtml(stats)}
   `;
-  bindTargetLevel(body, HEXAD_TYPES.achiever.color);
 }
 
-function setupPlayer(body, stats) {
-  const nextUnlock = COIN_UNLOCKS.find((u) => stats.coins < u.coins);
+function setupPlayer(body, statsBody, stats) {
   appState.setup.avatarColor = stats.selectedColor;
   body.innerHTML = `
     <p class="lead">タイプするたびにコインが貯まります。コインでアバターカラーを解放しましょう。</p>
-    <div class="setup-row">
-      <h3>所持コイン</h3>
-      <p style="font-size:1.4rem;font-weight:700;">🪙 ${stats.coins}</p>
-      ${nextUnlock ? `<p class="hint">次のカラー解放まであと ${nextUnlock.coins - stats.coins} コイン</p>` : '<p class="hint">全カラーを解放済みです！</p>'}
-    </div>
     <div class="setup-row">
       <h3>アバターカラー</h3>
       <div class="color-swatch-group">
@@ -1372,21 +1406,33 @@ function setupPlayer(body, stats) {
       const s = getStats(); s.selectedColor = color; saveStats(s);
     });
   });
+
+  const nextUnlock = COIN_UNLOCKS.find((u) => stats.coins < u.coins);
+  statsBody.innerHTML = `
+    <div class="setup-row">
+      <h3>所持コイン</h3>
+      <p style="font-size:1.4rem;font-weight:700;">🪙 ${stats.coins}</p>
+      ${nextUnlock ? `<p class="hint">次のカラー解放まであと ${nextUnlock.coins - stats.coins} コイン</p>` : '<p class="hint">全カラーを解放済みです！</p>'}
+    </div>
+  `;
 }
 
-function setupSocialiser(body, stats) {
+function setupSocialiser(body, statsBody, stats) {
   body.innerHTML = `
     <p class="lead">タイピング速度の評価基準と自分の過去ベストを目標に高みを目指しましょう。</p>
+    ${targetLevelSettingHtml(stats, 'customTargetCpm', 'CPM')}
+  `;
+  bindTargetLevel(body, HEXAD_TYPES.socialiser.color, 'customTargetCpm');
+
+  statsBody.innerHTML = `
     <div class="setup-row">
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
-    ${targetLevelSettingHtml(stats)}
   `;
-  bindTargetLevel(body, HEXAD_TYPES.socialiser.color);
 }
 
-function setupFreeSpirit(body, stats) {
+function setupFreeSpirit(body, statsBody, stats) {
   appState.setup.category = stats.freeSpirit.category;
   appState.setup.avatarColor = stats.selectedColor;
   body.innerHTML = `
@@ -1416,10 +1462,11 @@ function setupFreeSpirit(body, stats) {
   });
 }
 
-function setupPhilanthropist(body, stats) {
+function setupPhilanthropist(body, statsBody, stats) {
+  body.innerHTML = `<p class="lead">あなたが打った文字数は、みんなで目指す練習目標の達成に積み上がります（この端末内でのシミュレーションです）。</p>`;
+
   const pct = Math.min(100, Math.round((stats.communityTotal / COMMUNITY_GOAL) * 100));
-  body.innerHTML = `
-    <p class="lead">あなたが打った文字数は、みんなで目指す練習目標の達成に積み上がります（この端末内でのシミュレーションです）。</p>
+  statsBody.innerHTML = `
     <div class="setup-row">
       <h3>目標までの貢献度</h3>
       <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${HEXAD_TYPES.philanthropist.color}"></div></div>
@@ -1428,7 +1475,7 @@ function setupPhilanthropist(body, stats) {
   `;
 }
 
-function setupDisruptor(body, stats) {
+function setupDisruptor(body, statsBody, stats) {
   appState.setup.rule = stats.disruptor.rule;
   body.innerHTML = `
     <p class="lead">自分でスコアのルールを書き換えられます。既存のやり方にとらわれず、好きなルールを選びましょう。</p>
@@ -1437,13 +1484,13 @@ function setupDisruptor(body, stats) {
       ${chipGroup('rule', Object.entries(DISRUPTOR_RULES).map(([v, r]) => ({ value: v, label: r.label })), stats.disruptor.rule)}
       <p class="hint">速さ優先＝CPM×2 / 正確さ優先＝正確率×10 / カオス＝CPM×正確率÷10</p>
     </div>
-    ${targetLevelSettingHtml(stats)}
+    ${targetLevelSettingHtml(stats, 'customTargetScore', 'pt')}
   `;
   bindChipGroup(body, 'rule', HEXAD_TYPES.disruptor.color, (v) => {
     appState.setup.rule = v;
     const s = getStats(); s.disruptor.rule = v; saveStats(s);
   });
-  bindTargetLevel(body, HEXAD_TYPES.disruptor.color);
+  bindTargetLevel(body, HEXAD_TYPES.disruptor.color, 'customTargetScore');
 }
 
 /* ============================================================

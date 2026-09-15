@@ -334,6 +334,7 @@ const DEFAULT_STATS = {
   currentStreak: 0,
   bestStreak: 0,
   targetLevel: 'standard',
+  customTargetCpm: 200,
 };
 
 // 目標レベル（手動調整可能。倍率で基準値を伸縮する）
@@ -343,6 +344,12 @@ const TARGET_LEVELS = {
   hard:     { label: '上級', mult: 1.3 },
   extreme:  { label: '超級', mult: 1.6 },
 };
+
+// 「カスタム」（数値を直接指定するモード）は通算5回クリア（「中級タイピスト」相当）で解放
+const CUSTOM_TARGET_UNLOCK_COUNT = 5;
+function isCustomTargetUnlocked(stats) {
+  return (stats.sessionsCompleted || 0) >= CUSTOM_TARGET_UNLOCK_COUNT;
+}
 
 // 自己ベストを上回ったら、目標値そのものを際限なく引き上げる
 function risingTarget(base, best, margin) {
@@ -357,11 +364,12 @@ function evaluateClearStatus(result) {
   const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
   const stats = getStats();
   const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
+  const useCustomTarget = stats.targetLevel === 'custom' && isCustomTargetUnlocked(stats);
 
   let targetCpm = 150;
   if (diff === 'short') targetCpm = 120;
   if (diff === 'long') targetCpm = 180;
-  targetCpm = Math.round(targetCpm * levelMult);
+  targetCpm = useCustomTarget ? Math.max(1, Math.round(Number(stats.customTargetCpm) || targetCpm)) : Math.round(targetCpm * levelMult);
   const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
   targetCpm = risingTarget(targetCpm, bestCpm, 10);
 
@@ -574,19 +582,56 @@ function renderSetup() {
   document.documentElement.style.setProperty('--theme-color', color);
   $('#setup-title').textContent = '練習の準備';
   const body = $('#setup-body');
+  const statsBody = $('#setup-stats-body');
   const stats = getStats();
 
+  // 設定・操作系はスタートボタンの上（#setup-body）、ランキングや指標等はボタンの下（#setup-stats-body）に表示する
   body.innerHTML = `
     <div class="setup-row session-settings"></div>
     <div class="setup-achiever-body"></div>
   `;
   renderSessionSettings(body.querySelector('.session-settings'), color);
 
-  // Achiever固定コンテンツ
-  const badge = ACHIEVER_BADGES.filter((b) => stats.sessionsCompleted >= b.count).pop();
-  const next = ACHIEVER_BADGES.find((b) => stats.sessionsCompleted < b.count);
+  const unlocked = isCustomTargetUnlocked(stats);
+  const targetOptions = Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label }));
+  if (unlocked) targetOptions.push({ value: 'custom', label: '🔓 カスタム' });
+  const selectedLevel = (stats.targetLevel === 'custom' && !unlocked) ? 'standard' : (stats.targetLevel || 'standard');
+  const isCustom = selectedLevel === 'custom';
+  const customValue = stats.customTargetCpm != null ? stats.customTargetCpm : 200;
+
   body.querySelector('.setup-achiever-body').innerHTML = `
     <p class="lead">目標CPMと正確率90%を目指してスキルを磨きましょう。</p>
+    <div class="setup-row">
+      <h3>目標レベル</h3>
+      ${chipGroup('targetLevel', targetOptions, selectedLevel)}
+      ${unlocked
+        ? '<p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>'
+        : `<p class="hint">🔒 通算${CUSTOM_TARGET_UNLOCK_COUNT}回クリアすると、数値を直接指定できる「カスタム」が解放されます（現在 ${stats.sessionsCompleted || 0}回）。</p>`}
+      <div class="target-custom-input" style="margin-top:10px; ${isCustom ? '' : 'display:none;'}">
+        <label for="target-custom-value" style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">目標値を直接指定（CPM）</label>
+        <input type="number" id="target-custom-value" min="1" step="1" value="${customValue}" style="width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--baseline); background:var(--page); color:var(--text-primary);">
+      </div>
+    </div>
+  `;
+  bindChipGroup(body, 'targetLevel', color, (v) => {
+    appState.setup.targetLevel = v;
+    const s = getStats(); s.targetLevel = v; saveStats(s);
+    const box = body.querySelector('.target-custom-input');
+    if (box) box.style.display = v === 'custom' ? 'block' : 'none';
+  });
+  const customInput = body.querySelector('#target-custom-value');
+  if (customInput) {
+    customInput.addEventListener('change', () => {
+      const val = Math.max(1, Math.round(Number(customInput.value) || 1));
+      customInput.value = val;
+      const s = getStats(); s.customTargetCpm = val; saveStats(s);
+    });
+  }
+
+  // Achiever固定コンテンツ（ランキング・指標等）
+  const badge = ACHIEVER_BADGES.filter((b) => stats.sessionsCompleted >= b.count).pop();
+  const next = ACHIEVER_BADGES.find((b) => stats.sessionsCompleted < b.count);
+  statsBody.innerHTML = `
     <div class="setup-row">
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
@@ -595,16 +640,7 @@ function renderSetup() {
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
-    <div class="setup-row">
-      <h3>目標レベル</h3>
-      ${chipGroup('targetLevel', Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label })), stats.targetLevel || 'standard')}
-      <p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>
-    </div>
   `;
-  bindChipGroup(body, 'targetLevel', color, (v) => {
-    appState.setup.targetLevel = v;
-    const s = getStats(); s.targetLevel = v; saveStats(s);
-  });
 }
 
 function renderSessionSettings(container, color) {
