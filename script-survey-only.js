@@ -1420,7 +1420,9 @@ function renderGame() {
   $('#game-romaji').innerHTML = parts.join('');
   const nextPreview = $('#game-next-preview');
   if (nextPreview) {
-    nextPreview.textContent = game.nextSentence ? `次: ${game.nextSentence.kanji}` : '';
+    nextPreview.innerHTML = game.nextSentence
+      ? `<span class="next-label">NEXT</span><span class="next-text">${game.nextSentence.kanji}</span>`
+      : '';
   }
   updateHud();
   renderSidePanel();

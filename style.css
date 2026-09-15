@@ -212,7 +212,30 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
   to { box-shadow: 0 0 20px rgba(237,161,0,0.4); }
 }
 
-.game-next-preview { text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: 14px; min-height: 1.2em; }
+.game-next-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--gridline);
+  min-height: 1.6em;
+}
+.game-next-preview .next-label {
+  flex: none;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: var(--text-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.game-next-preview .next-text {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
 
 .rare-sentence {
   background: linear-gradient(135deg, rgba(0,131,0,0.08), rgba(0,131,0,0.18)) !important;
