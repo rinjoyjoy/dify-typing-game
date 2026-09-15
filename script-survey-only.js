@@ -431,6 +431,25 @@ function typeChance(hexadResult, types, fullChance, lightChance) {
   return 0;
 }
 
+// 自由人のレア文の抽選（メイン／準タイプ／それ以外で確率が変わる3段階レアリティ）
+// メイン: レア10% + 超レア2% + ウルトラレア0.5%
+// 準タイプ: レア5% + 激レア1%
+// それ以外: レア2% + 激レア0.2%
+function rollRareTier(hexadResult) {
+  const isPrimary = !!(hexadResult && hexadResult.primaryType === 'freeSpirit');
+  const isSecondary = !isPrimary && getSecondaryType(hexadResult) === 'freeSpirit';
+  let pUltra = 0, pSuper = 0, pRare;
+  if (isPrimary) { pUltra = 0.005; pSuper = 0.02; pRare = 0.10; }
+  else if (isSecondary) { pSuper = 0.01; pRare = 0.05; }
+  else { pSuper = 0.002; pRare = 0.02; }
+
+  const roll = Math.random();
+  if (roll < pUltra) return 'ultra';
+  if (roll < pUltra + pSuper) return 'super';
+  if (roll < pUltra + pSuper + pRare) return 'rare';
+  return null;
+}
+
 const THANKS_MESSAGES = [
   '誰かがあなたの練習で少し救われました',
   '小さな貢献が積み重なっています',
@@ -1337,10 +1356,10 @@ function loadNextSentence(session) {
   if (!session.queue.length) session.queue = shuffle(session.pool);
   session.sentence = session.queue.pop();
 
-  // 自由人（メインまたは準タイプ）: 選んだテーマは崩さず、たまに「レア文」として演出だけ特別になる
+  // 自由人（メインまたは準タイプ、それ以外でも低確率）: 選んだテーマは崩さず、
+  // たまに「レア文」として演出だけ特別になる（3段階のレアリティ）
   const hr = appState && appState.hexadResult;
-  const rareChance = typeChance(hr, ['freeSpirit'], 0.20, 0.08);
-  session.isRareSentence = rareChance > 0 && Math.random() < rareChance;
+  session.rareTier = rollRareTier(hr);
 
   session.moras = buildMoraList(session.sentence.reading);
   session.idx = 0;
@@ -1431,7 +1450,7 @@ function processChar(ch) {
     }
     game.totalMistakes++;
     // レア文・ボーナス文は、ミスタイプした時点で特別扱いを取り消す（ボーナス加点も付かなくなる）
-    game.isRareSentence = false;
+    game.rareTier = null;
     game.isBonusSentence = false;
     const el = $('#game-romaji');
     el.classList.add('mistake-flash');
@@ -1459,13 +1478,20 @@ function finishMora(exactOption) {
 function renderGame() {
   updateThemeColor();
   const sentenceEl = $('#game-sentence');
-  sentenceEl.classList.remove('bonus-sentence', 'rare-sentence');
+  sentenceEl.classList.remove('bonus-sentence', 'rare-sentence', 'rare-sentence-super', 'rare-sentence-ultra');
+  const freeSpiritColor = appState.setup.avatarColor || HEXAD_TYPES.freeSpirit.color;
   if (game.isBonusSentence) {
     sentenceEl.classList.add('bonus-sentence');
     $('#game-kanji').innerHTML = `✨ <span style="color:#eda100">${game.sentence.kanji}</span> ✨`;
-  } else if (game.isRareSentence) {
+  } else if (game.rareTier === 'ultra') {
+    sentenceEl.classList.add('rare-sentence-ultra');
+    $('#game-kanji').innerHTML = `🎆🌠 <span style="color:${freeSpiritColor}">${game.sentence.kanji}</span> 🌠🎆`;
+  } else if (game.rareTier === 'super') {
+    sentenceEl.classList.add('rare-sentence-super');
+    $('#game-kanji').innerHTML = `💫✨ <span style="color:${freeSpiritColor}">${game.sentence.kanji}</span> ✨💫`;
+  } else if (game.rareTier === 'rare') {
     sentenceEl.classList.add('rare-sentence');
-    $('#game-kanji').innerHTML = `🌟 <span style="color:${appState.setup.avatarColor || HEXAD_TYPES.freeSpirit.color}">${game.sentence.kanji}</span> 🌟`;
+    $('#game-kanji').innerHTML = `🌟 <span style="color:${freeSpiritColor}">${game.sentence.kanji}</span> 🌟`;
   } else {
     $('#game-kanji').textContent = game.sentence.kanji;
   }

@@ -257,6 +257,30 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
   to { box-shadow: 0 0 20px rgba(0,131,0,0.35); }
 }
 
+/* 超レア／激レア（レアの一段上） */
+.rare-sentence-super {
+  background: linear-gradient(135deg, rgba(237,161,0,0.10), rgba(0,131,0,0.16)) !important;
+  border: 1px solid #eda100;
+  box-shadow: 0 0 18px rgba(237,161,0,0.3);
+  animation: pulse-rare-super 1.3s infinite alternate;
+}
+@keyframes pulse-rare-super {
+  from { box-shadow: 0 0 8px rgba(237,161,0,0.15); }
+  to { box-shadow: 0 0 28px rgba(237,161,0,0.5); }
+}
+
+/* ウルトラレア（最上位。自由人メインのみ出現） */
+.rare-sentence-ultra {
+  background: linear-gradient(135deg, rgba(233,72,189,0.14), rgba(74,58,167,0.18), rgba(0,131,0,0.12)) !important;
+  border: 1px solid #e34dbd;
+  box-shadow: 0 0 24px rgba(233,72,189,0.35);
+  animation: pulse-rare-ultra 0.9s infinite alternate;
+}
+@keyframes pulse-rare-ultra {
+  from { box-shadow: 0 0 10px rgba(233,72,189,0.2); filter: hue-rotate(0deg); }
+  to { box-shadow: 0 0 34px rgba(233,72,189,0.65); filter: hue-rotate(40deg); }
+}
+
 /* 変革者の文完了エフェクト。単調にならないよう3パターンをランダムに切り替える */
 .disruptor-flash-glitch { animation: disruptorGlitch .5s ease; }
 @keyframes disruptorGlitch {
