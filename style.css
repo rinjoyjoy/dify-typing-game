@@ -261,6 +261,18 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
 .leaderboard li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--gridline); font-size: 0.9rem; }
 .leaderboard li.me { font-weight: 700; color: var(--type-socialiser); }
 
+.survey-cta-box {
+  margin: 20px 0;
+  padding: 18px 16px;
+  background: color-mix(in srgb, var(--theme-color, var(--type-achiever)) 8%, var(--page));
+  border: 1px solid var(--theme-color, var(--type-achiever));
+  border-radius: 10px;
+  text-align: center;
+}
+.survey-cta-text { margin: 0 0 10px; font-weight: 600; }
+.survey-cta-box .hint { margin: 0 0 10px; }
+.survey-cta-box .btn { width: 100%; }
+
 .export-details { margin-top: 18px; border: 1px solid var(--gridline); border-radius: 8px; padding: 4px 14px; }
 .export-details summary { cursor: pointer; padding: 8px 0; color: var(--text-secondary); font-size: 0.9rem; }
 

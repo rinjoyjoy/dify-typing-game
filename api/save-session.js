@@ -17,12 +17,14 @@ module.exports = async function handler(req, res) {
       category = 'random',
       difficulty = 'random',
       timeLimitSec = null,
+      participantId = null,
+      group = null,
     } = req.body || {};
 
     const sql = `
-      INSERT INTO typing_sessions 
-      (nickname, hexad_type, cpm, accuracy, sentences_completed, correct_keystrokes, elapsed_sec, category, difficulty, time_limit_sec)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO typing_sessions
+      (nickname, hexad_type, cpm, accuracy, sentences_completed, correct_keystrokes, elapsed_sec, category, difficulty, time_limit_sec, participant_id, participant_group)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id, created_at;
     `;
 
@@ -37,6 +39,8 @@ module.exports = async function handler(req, res) {
       category,
       difficulty,
       timeLimitSec,
+      participantId,
+      group,
     ];
 
     const result = await query(sql, values);

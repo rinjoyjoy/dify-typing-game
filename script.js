@@ -554,6 +554,8 @@ const appState = {
   answers: {},
   hexadResult: null,
   setup: {},
+  participantId: null,
+  group: null,
 };
 
 let game = null;
@@ -563,6 +565,31 @@ let game = null;
    ============================================================ */
 
 function $(sel) { return document.querySelector(sel); }
+
+/* ============================================================
+   参加者番号 / 群の取得（?pid=&group= で渡される想定）
+   ============================================================ */
+const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
+const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
+
+function initParticipantInfo() {
+  const params = new URLSearchParams(location.search);
+  const pidFromUrl = params.get('pid');
+  const groupFromUrl = params.get('group');
+  if (pidFromUrl) {
+    appState.participantId = pidFromUrl;
+    appState.group = groupFromUrl || appState.group;
+    try { localStorage.setItem(PARTICIPANT_STORAGE_KEY, JSON.stringify({ pid: appState.participantId, group: appState.group })); } catch (e) {}
+  } else {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PARTICIPANT_STORAGE_KEY) || 'null');
+      if (saved) {
+        appState.participantId = saved.pid;
+        appState.group = saved.group;
+      }
+    } catch (e) {}
+  }
+}
 function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
@@ -653,7 +680,9 @@ function initWelcomeScreen() {
     resumeBtn.style.display = 'block';
     resumeBtn.addEventListener('click', () => {
       try {
-        appState.hexadResult = JSON.parse(savedResultStr);
+        const normalized = normalizeHexadResult(JSON.parse(savedResultStr));
+        if (!normalized) throw new Error('invalid saved result');
+        appState.hexadResult = normalized;
         appState.nickname = localStorage.getItem(STORAGE_KEYS.nickname) || 'ゲスト';
         renderSetup();
         showScreen('screen-setup');
@@ -841,12 +870,9 @@ ${chatText}`;
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
         const jsonStr = answerText.substring(firstBrace, lastBrace + 1);
         try {
-          const result = JSON.parse(jsonStr);
-          if (result.primaryType) {
-            if (!result.scores) {
-              result.scores = { achiever: 0, player: 0, socialiser: 0, freeSpirit: 0, philanthropist: 0, disruptor: 0 };
-              result.scores[result.primaryType] = 100;
-            }
+          const parsed = JSON.parse(jsonStr);
+          const result = normalizeHexadResult(parsed);
+          if (result) {
             appState.hexadResult = result;
             localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
             $('#result-fallback-note').style.display = 'none';
@@ -967,7 +993,9 @@ async function handleChatSend() {
       if (cleanText) appendChatMessage('ai', cleanText);
       
       try {
-        const result = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        const result = normalizeHexadResult(parsed);
+        if (!result) throw new Error('empty result');
         appState.hexadResult = result;
         localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
         setTimeout(() => {
@@ -990,6 +1018,41 @@ async function handleChatSend() {
     $('#btn-chat-send').disabled = !input.value.trim();
     input.focus();
   }
+}
+
+/* ============================================================
+   LLM判定結果の検証・正規化
+   （primaryTypeが想定外の値で返ってきた場合に画面がクラッシュしないようにする）
+   ============================================================ */
+function normalizeHexadResult(result) {
+  if (!result || typeof result !== 'object') return null;
+
+  let type = result.primaryType;
+  if (typeof type === 'string') {
+    const matched = HEXAD_ORDER.find((t) => t.toLowerCase() === type.toLowerCase());
+    if (matched) type = matched;
+  }
+
+  if (!HEXAD_TYPES[type]) {
+    // primaryTypeが未知の値の場合は、scoresの最大値から推定。それも無ければachieverにフォールバック
+    let best = null;
+    let bestScore = -Infinity;
+    if (result.scores && typeof result.scores === 'object') {
+      for (const t of HEXAD_ORDER) {
+        const s = Number(result.scores[t]);
+        if (!Number.isNaN(s) && s > bestScore) { bestScore = s; best = t; }
+      }
+    }
+    type = best || 'achiever';
+  }
+
+  const scores = { ...(result.scores || {}) };
+  for (const t of HEXAD_ORDER) {
+    const s = Number(scores[t]);
+    scores[t] = Number.isNaN(s) ? (t === type ? 70 : 30) : s;
+  }
+
+  return { ...result, primaryType: type, scores };
 }
 
 /* ============================================================
@@ -1281,6 +1344,7 @@ function loadNextSentence(session) {
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
+$('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(); });
 
 function startGameFlow() {
@@ -1542,6 +1606,8 @@ function onGameFinished(result) {
 
   const sessionLogRecord = {
     timestamp: new Date().toISOString(),
+    participantId: appState.participantId || null,
+    group: appState.group || null,
     nickname: appState.nickname,
     hexadType: type,
     hexadScores: appState.hexadResult ? appState.hexadResult.scores : null,
@@ -1590,6 +1656,12 @@ function renderPostgame(result, stats, newUnlocks) {
 
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
   $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks);
+
+  const pidNote = $('#participant-id-display');
+  if (pidNote) {
+    pidNote.textContent = appState.participantId ? `参加者番号: ${appState.participantId}` : '';
+    pidNote.style.display = appState.participantId ? 'block' : 'none';
+  }
 
   if (stats.totalPlayTimeSec >= 600) {
     $('#rediagnose-row').style.display = 'flex';
@@ -1666,7 +1738,7 @@ $('#btn-export-json').addEventListener('click', () => {
 $('#btn-export-csv').addEventListener('click', () => {
   const log = getLog();
   if (!log.length) { alert('記録がありません。'); return; }
-  const cols = ['timestamp', 'nickname', 'hexadType', 'classifyMethod', 'sentenceCategory', 'difficulty', 'timeLimitSec', 'sentencesCompleted', 'elapsedSec', 'cpm', 'accuracy', 'mistakes', 'correctKeystrokes'];
+  const cols = ['timestamp', 'participantId', 'group', 'nickname', 'hexadType', 'classifyMethod', 'sentenceCategory', 'difficulty', 'timeLimitSec', 'sentencesCompleted', 'elapsedSec', 'cpm', 'accuracy', 'mistakes', 'correctKeystrokes'];
   const hexadScoreCols = HEXAD_ORDER.map((t) => `score_${t}`);
   const header = [...cols, ...hexadScoreCols].join(',');
   const rows = log.map((r) => {
@@ -1689,30 +1761,47 @@ $('#btn-clear-log').addEventListener('click', () => {
    ============================================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
+  initParticipantInfo();
   initWelcomeScreen();
   fetchStatsFromVercelDb();
   
   // 隠しコマンド処理
   let secretBuffer = '';
+  let secretCodeBuffer = [];
   document.addEventListener('keydown', (e) => {
-    // 制御キーなどは無視（ただしIME入力のProcessは許可）
-    if (e.key.length > 1 && e.key !== 'Process') return;
-    
-    secretBuffer += e.key;
+    if (e.code) {
+      secretCodeBuffer.push(e.code);
+      if (secretCodeBuffer.length > 20) secretCodeBuffer.shift();
+    }
+    const isDeTaCode = secretCodeBuffer.slice(-5).join(',') === 'KeyD,KeyE,Minus,KeyT,KeyA';
+
+    if (e.key && e.key.length === 1) {
+      secretBuffer += e.key.toLowerCase();
+    }
     if (secretBuffer.length > 30) secretBuffer = secretBuffer.slice(-30);
     
-    // 隠しコマンド1: けんきゅうでーた (エクスポート画面表示)
-    if (secretBuffer.endsWith('kenkyuude-ta') || secretBuffer.endsWith('けんきゅうでーた')) {
+    // 隠しコマンド1: de-ta / でーた (エクスポート画面表示)
+    if (
+      isDeTaCode ||
+      secretBuffer.endsWith('de-ta') ||
+      secretBuffer.endsWith('でーた') ||
+      secretBuffer.endsWith('deta')
+    ) {
       const exportUi = $('#secret-export-ui');
-      exportUi.style.display = 'block';
-      exportUi.scrollIntoView({ behavior: 'smooth' });
-      secretBuffer = ''; // リセット
+      if (exportUi) {
+        exportUi.style.display = 'block';
+        exportUi.open = true;
+        exportUi.scrollIntoView({ behavior: 'smooth' });
+      }
+      secretBuffer = '';
+      secretCodeBuffer = [];
     }
 
     // 隠しコマンド2: FORM (Googleフォームを開く)
-    if (secretBuffer.toUpperCase().endsWith('FORM')) {
-      window.open('https://forms.gle/CZLPNUX4T4yoJBmg8', '_blank');
-      secretBuffer = ''; // リセット
+    if (secretBuffer.toUpperCase().endsWith('FORM') || secretCodeBuffer.slice(-4).join(',') === 'KeyF,KeyO,KeyR,KeyM') {
+      window.open(SURVEY_URL, '_blank');
+      secretBuffer = '';
+      secretCodeBuffer = [];
     }
   });
 });

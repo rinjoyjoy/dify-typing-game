@@ -350,9 +350,9 @@ const DIFFICULTY_OPTIONS = [
 const TYPE_DEFAULT_TIME = { philanthropist: 'none' };
 
 const STORAGE_KEYS = {
-  model: 'gtp_model', nickname: 'gtp_nickname',
-  stats: 'gtp_stats', log: 'gtp_log',
-  hexadResult: 'gtp_hexad_result',
+  model: 'gtp_so_model', nickname: 'gtp_so_nickname',
+  stats: 'gtp_so_stats', log: 'gtp_so_log',
+  hexadResult: 'gtp_so_hexad_result',
 };
 
 const DEFAULT_STATS = {
@@ -539,6 +539,8 @@ const appState = {
   answers: {},
   hexadResult: null,
   setup: {},
+  participantId: null,
+  group: null,
 };
 
 let game = null;
@@ -550,6 +552,31 @@ let game = null;
 function $(sel) { return document.querySelector(sel); }
 function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ============================================================
+   参加者番号 / 群の取得（?pid=&group= で渡される想定）
+   ============================================================ */
+const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
+const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
+
+function initParticipantInfo() {
+  const params = new URLSearchParams(location.search);
+  const pidFromUrl = params.get('pid');
+  const groupFromUrl = params.get('group');
+  if (pidFromUrl) {
+    appState.participantId = pidFromUrl;
+    appState.group = groupFromUrl || appState.group;
+    try { localStorage.setItem(PARTICIPANT_STORAGE_KEY, JSON.stringify({ pid: appState.participantId, group: appState.group })); } catch (e) {}
+  } else {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PARTICIPANT_STORAGE_KEY) || 'null');
+      if (saved) {
+        appState.participantId = saved.pid;
+        appState.group = saved.group;
+      }
+    } catch (e) {}
+  }
+}
 
 function showScreen(id) {
   $all('.screen').forEach((el) => el.classList.remove('active'));
@@ -1066,6 +1093,7 @@ function loadNextSentence(session) {
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
+$('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(); });
 
 function startGameFlow() {
@@ -1171,6 +1199,7 @@ function triggerSentenceCompleteEffect(isBonus = false) {
   el.appendChild(pop);
   setTimeout(() => pop.remove(), 800);
 }
+
 
 function currentElapsedSec() { return game.startTime ? (Date.now() - game.startTime) / 1000 : 0; }
 function currentCpm() { const el = currentElapsedSec(); return el > 0 ? Math.round((game.totalCorrect / el) * 60) : 0; }
@@ -1327,6 +1356,8 @@ function onGameFinished(result) {
 
   const sessionLogRecord = {
     timestamp: new Date().toISOString(),
+    participantId: appState.participantId || null,
+    group: appState.group || null,
     nickname: appState.nickname,
     hexadType: type,
     hexadScores: appState.hexadResult ? appState.hexadResult.scores : null,
@@ -1372,6 +1403,12 @@ function renderPostgame(result, stats, newUnlocks) {
 
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
   $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks);
+
+  const pidNote = $('#participant-id-display');
+  if (pidNote) {
+    pidNote.textContent = appState.participantId ? `参加者番号: ${appState.participantId}` : '';
+    pidNote.style.display = appState.participantId ? 'block' : 'none';
+  }
 
   if (stats.totalPlayTimeSec >= 600) {
     $('#rediagnose-row').style.display = 'flex';
@@ -1448,7 +1485,7 @@ $('#btn-export-json').addEventListener('click', () => {
 $('#btn-export-csv').addEventListener('click', () => {
   const log = getLog();
   if (!log.length) { alert('記録がありません。'); return; }
-  const cols = ['timestamp', 'nickname', 'hexadType', 'classifyMethod', 'sentenceCategory', 'difficulty', 'timeLimitSec', 'sentencesCompleted', 'elapsedSec', 'cpm', 'accuracy', 'mistakes', 'correctKeystrokes'];
+  const cols = ['timestamp', 'participantId', 'group', 'nickname', 'hexadType', 'classifyMethod', 'sentenceCategory', 'difficulty', 'timeLimitSec', 'sentencesCompleted', 'elapsedSec', 'cpm', 'accuracy', 'mistakes', 'correctKeystrokes'];
   const hexadScoreCols = HEXAD_ORDER.map((t) => `score_${t}`);
   const header = [...cols, ...hexadScoreCols].join(',');
   const rows = log.map((r) => {
@@ -1471,29 +1508,47 @@ $('#btn-clear-log').addEventListener('click', () => {
    ============================================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
+  initParticipantInfo();
   initWelcomeScreen();
   fetchStatsFromVercelDb();
-  
+
   // 隠しコマンド処理
   let secretBuffer = '';
+  let secretCodeBuffer = [];
   document.addEventListener('keydown', (e) => {
-    if (e.key.length > 1 && e.key !== 'Process') return;
-    
-    secretBuffer += e.key;
+    if (e.code) {
+      secretCodeBuffer.push(e.code);
+      if (secretCodeBuffer.length > 20) secretCodeBuffer.shift();
+    }
+    const isDeTaCode = secretCodeBuffer.slice(-5).join(',') === 'KeyD,KeyE,Minus,KeyT,KeyA';
+
+    if (e.key && e.key.length === 1) {
+      secretBuffer += e.key.toLowerCase();
+    }
     if (secretBuffer.length > 30) secretBuffer = secretBuffer.slice(-30);
     
-    // 隠しコマンド1: けんきゅうでーた (エクスポート画面表示)
-    if (secretBuffer.endsWith('kenkyuude-ta') || secretBuffer.endsWith('けんきゅうでーた')) {
+    // 隠しコマンド1: de-ta / でーた (エクスポート画面表示)
+    if (
+      isDeTaCode ||
+      secretBuffer.endsWith('de-ta') ||
+      secretBuffer.endsWith('でーた') ||
+      secretBuffer.endsWith('deta')
+    ) {
       const exportUi = $('#secret-export-ui');
-      exportUi.style.display = 'block';
-      exportUi.scrollIntoView({ behavior: 'smooth' });
+      if (exportUi) {
+        exportUi.style.display = 'block';
+        exportUi.open = true;
+        exportUi.scrollIntoView({ behavior: 'smooth' });
+      }
       secretBuffer = '';
+      secretCodeBuffer = [];
     }
 
     // 隠しコマンド2: FORM (Googleフォームを開く)
-    if (secretBuffer.toUpperCase().endsWith('FORM')) {
-      window.open('https://forms.gle/CZLPNUX4T4yoJBmg8', '_blank');
+    if (secretBuffer.toUpperCase().endsWith('FORM') || secretCodeBuffer.slice(-4).join(',') === 'KeyF,KeyO,KeyR,KeyM') {
+      window.open(SURVEY_URL, '_blank');
       secretBuffer = '';
+      secretCodeBuffer = [];
     }
   });
 });

@@ -30,11 +30,19 @@ async function initDb() {
       category VARCHAR(50),
       difficulty VARCHAR(50),
       time_limit_sec INT,
+      participant_id VARCHAR(50),
+      participant_group VARCHAR(10),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
+  // 既存テーブルに対しては列を追加でマイグレーション（研究の3群割り付け対応）
+  const migrateQuery = `
+    ALTER TABLE typing_sessions ADD COLUMN IF NOT EXISTS participant_id VARCHAR(50);
+    ALTER TABLE typing_sessions ADD COLUMN IF NOT EXISTS participant_group VARCHAR(10);
+  `;
   try {
     await pool.query(createTableQuery);
+    await pool.query(migrateQuery);
     isInitialized = true;
   } catch (err) {
     console.error('Error initializing database:', err);

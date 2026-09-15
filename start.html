@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タイピングゲーム研究（参加者受付）</title>
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+
+<body>
+  <div id="app">
+    <section class="screen active">
+      <div class="card">
+        <h1>カスタムタイピング研究</h1>
+        <p class="lead">はじめに、あらかじめお伝えしている「参加者番号」を入力してください。番号に応じて体験する内容が自動的に決まります。</p>
+
+        <div class="field">
+          <label for="pid-input">参加者番号</label>
+          <input type="text" id="pid-input" inputmode="numeric" pattern="[0-9]*" placeholder="例: 12" autocomplete="off">
+        </div>
+        <p id="pid-error" class="hint" style="color: var(--critical); display:none;"></p>
+
+        <div class="button-row">
+          <button id="btn-enter" class="btn btn-primary">はじめる</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    'use strict';
+    // 参加者番号を3で割った余りで3群に割り付ける。
+    //   余り 1 → A群: AIチャット診断 → ゲーム → アンケート (index.html)
+    //   余り 2 → B群: アンケート診断 → ゲーム → アンケート (index-survey-only.html)
+    //   余り 0（3の倍数） → C群: 診断なし・ゲームのみ → アンケート (index-no-diagnosis.html)
+    const GROUP_TARGETS = {
+      A: 'index.html',
+      B: 'index-survey-only.html',
+      C: 'index-no-diagnosis.html',
+    };
+
+    function groupForParticipant(n) {
+      const rem = n % 3;
+      if (rem === 1) return 'A';
+      if (rem === 2) return 'B';
+      return 'C'; // 3の倍数（余り0）
+    }
+
+    function $(sel) { return document.querySelector(sel); }
+
+    function goToGroup() {
+      const raw = $('#pid-input').value.trim();
+      const errEl = $('#pid-error');
+      errEl.style.display = 'none';
+
+      const n = Number(raw);
+      if (!raw || !Number.isInteger(n) || n <= 0) {
+        errEl.textContent = '参加者番号は1以上の整数で入力してください。';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const group = groupForParticipant(n);
+      const target = GROUP_TARGETS[group];
+      location.href = `${target}?pid=${encodeURIComponent(n)}&group=${encodeURIComponent(group)}`;
+    }
+
+    $('#btn-enter').addEventListener('click', goToGroup);
+    $('#pid-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') goToGroup();
+    });
+  </script>
+</body>
+
+</html>
