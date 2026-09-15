@@ -210,6 +210,44 @@ h3 { font-size: 1.05rem; margin: 16px 0 8px; }
   to { box-shadow: 0 0 20px rgba(237,161,0,0.4); }
 }
 
+.game-next-preview { text-align: center; font-size: 0.8rem; color: var(--text-muted); margin: -8px 0 14px; }
+
+.rare-sentence {
+  background: linear-gradient(135deg, rgba(0,131,0,0.08), rgba(0,131,0,0.18)) !important;
+  border: 1px solid var(--type-freeSpirit);
+  box-shadow: 0 0 15px rgba(0,131,0,0.2);
+  animation: pulse-rare 2s infinite alternate;
+}
+@keyframes pulse-rare {
+  from { box-shadow: 0 0 5px rgba(0,131,0,0.1); }
+  to { box-shadow: 0 0 20px rgba(0,131,0,0.35); }
+}
+
+/* 変革者の文完了エフェクト。単調にならないよう3パターンをランダムに切り替える */
+.disruptor-flash-glitch { animation: disruptorGlitch .5s ease; }
+@keyframes disruptorGlitch {
+  0% { filter: none; transform: translateX(0); }
+  20% { filter: hue-rotate(25deg) saturate(1.6); transform: translateX(-3px); }
+  40% { filter: hue-rotate(-20deg) saturate(1.4); transform: translateX(3px); }
+  60% { filter: hue-rotate(15deg); transform: translateX(-2px); }
+  100% { filter: none; transform: translateX(0); }
+}
+
+.disruptor-flash-invert { animation: disruptorInvert .45s ease; }
+@keyframes disruptorInvert {
+  0%, 100% { filter: none; }
+  50% { filter: invert(0.85) hue-rotate(180deg); }
+}
+
+.disruptor-flash-wobble { animation: disruptorWobble .5s ease; }
+@keyframes disruptorWobble {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-3deg) scale(1.02); }
+  75% { transform: rotate(3deg) scale(1.02); }
+}
+
+.secondary-touch { font-style: italic; }
+
 .game-romaji.mistake-flash { animation: mistakeShake .3s ease, mistakeFlashBg .3s ease; }
 @keyframes mistakeShake {
   0%, 100% { transform: translateX(0); }

@@ -95,7 +95,7 @@ const SENTENCES = [
   { kanji: 'コンビニでスイーツを買う', reading: 'こんびにですいーつをかう', category: 'daily' },
   { kanji: 'お茶を淹れてホッと一息', reading: 'おちゃをいれてほっとひといき', category: 'daily' },
   { kanji: '机の上を綺麗に片付ける', reading: 'つくえのうえをきれいにかたづける', category: 'daily' },
-  { kanji: '郵便受けに手紙が入っていた', reading: 'ゆうびんうけにてがみがいっていた', category: 'daily' },
+  { kanji: '郵便受けに手紙が入っていた', reading: 'ゆうびんうけにてがみがはいっていた', category: 'daily' },
   { kanji: '近所の人とすれ違って挨拶した', reading: 'きんじょのひととすれちがってあいさつした', category: 'daily' },
   { kanji: '階段を上ると息が切れる', reading: 'かいだんをのぼるといきがきれる', category: 'daily' },
   { kanji: '信号が青に変わるのを待つ', reading: 'しんごうがあおにかわるのをまつ', category: 'daily' },
@@ -139,7 +139,7 @@ const SENTENCES = [
   { kanji: '山頂からの眺めは最高だ', reading: 'さんちょうからのながめはさいこうだ', category: 'nature' },
   { kanji: '野生の動物と遭遇した', reading: 'やせいのどうぶつとそうぐうした', category: 'nature' },
   { kanji: '星空を見上げて星座を探す', reading: 'ほしぞらをみあげてせいざをさがす', category: 'nature' },
-  { kanji: '雷の音が遠くで鳴っている', reading: 'かみなりのあとがとおくでなっている', category: 'nature' },
+  { kanji: '雷の音が遠くで鳴っている', reading: 'かみなりのおとがとおくでなっている', category: 'nature' },
   { kanji: '冷たい湧き水でのどを潤す', reading: 'つめたいわきみずでのどをうるおす', category: 'nature' },
   { kanji: '霧が晴れて景色が現れる', reading: 'きりがはれてけしきがあらわれる', category: 'nature' },
   { kanji: '自然の摂理に思いを馳せる', reading: 'しぜんのせつりにおもいをはせる', category: 'nature' },
@@ -149,7 +149,7 @@ const SENTENCES = [
   { kanji: '夕日が沈む海を眺める', reading: 'ゆうひがしずむうみをながめる', category: 'nature' },
   { kanji: '鳥が群れをなして飛んでいく', reading: 'とりがむれをなしてとんでいく', category: 'nature' },
   { kanji: '雨水が葉からこぼれ落ちる', reading: 'あまみずがはからこぼれおちる', category: 'nature' },
-  { kanji: '失敗は成功のもとである', reading: 'しっぱいばせいこうのもとである', category: 'motivation' },
+  { kanji: '失敗は成功のもとである', reading: 'しっぱいはせいこうのもとである', category: 'motivation' },
   { kanji: '一歩踏み出す勇気を持とう', reading: 'いっぽふみだすゆうきをもとう', category: 'motivation' },
   { kanji: '昨日の自分より今日の自分', reading: 'きのうのじぶんよりきょうのじぶん', category: 'motivation' },
   { kanji: 'ピンチはチャンスに変わる', reading: 'ぴんちはちゃんすにかわる', category: 'motivation' },
@@ -331,7 +331,23 @@ const DEFAULT_STATS = {
   totalCorrectChars: 0,
   totalPlayTimeSec: 0,
   leaderboard: [],
+  currentStreak: 0,
+  bestStreak: 0,
+  targetLevel: 'standard',
 };
+
+// 目標レベル（手動調整可能。倍率で基準値を伸縮する）
+const TARGET_LEVELS = {
+  easy:     { label: '初級', mult: 0.8 },
+  standard: { label: '標準', mult: 1.0 },
+  hard:     { label: '上級', mult: 1.3 },
+  extreme:  { label: '超級', mult: 1.6 },
+};
+
+// 自己ベストを上回ったら、目標値そのものを際限なく引き上げる
+function risingTarget(base, best, margin) {
+  return best > 0 && best + margin > base ? best + margin : base;
+}
 
 /* ============================================================
    タイピング練習のクリア/非クリア判定（Achiever固定）
@@ -339,17 +355,22 @@ const DEFAULT_STATS = {
 function evaluateClearStatus(result) {
   const diff = appState.setup.difficulty || 'random';
   const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
-  
+  const stats = getStats();
+  const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
+
   let targetCpm = 150;
   if (diff === 'short') targetCpm = 120;
   if (diff === 'long') targetCpm = 180;
+  targetCpm = Math.round(targetCpm * levelMult);
+  const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
+  targetCpm = risingTarget(targetCpm, bestCpm, 10);
 
   const isCleared = result.cpm >= targetCpm && result.accuracy >= 90;
   return {
     cleared: isCleared,
     title: isCleared ? '🎉 STAGE CLEAR (目標達成!)' : '❌ FAILED (クリアならず...)',
-    desc: isCleared 
-      ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！` 
+    desc: isCleared
+      ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！`
       : `目標基準: ${targetCpm} CPM & 正確率90% 以上 (今回: ${result.cpm} CPM / 正確率 ${result.accuracy}%)`
   };
 }
@@ -570,10 +591,20 @@ function renderSetup() {
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
       ${next ? `<div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (stats.sessionsCompleted / next.count) * 100)}%;background:${color}"></div></div><p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回クリア</p>` : '<p class="hint">全ての称号を獲得済みです！</p>'}
+      <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
+    <div class="setup-row">
+      <h3>目標レベル</h3>
+      ${chipGroup('targetLevel', Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label })), stats.targetLevel || 'standard')}
+      <p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>
+    </div>
   `;
+  bindChipGroup(body, 'targetLevel', color, (v) => {
+    appState.setup.targetLevel = v;
+    const s = getStats(); s.targetLevel = v; saveStats(s);
+  });
 }
 
 function renderSessionSettings(container, color) {
@@ -610,16 +641,18 @@ function bindChipGroup(container, name, color, onSelect) {
    ゲーム本体
    ============================================================ */
 
+function filterByDifficulty(pool, difficulty) {
+  if (!difficulty || difficulty === 'random') return pool;
+  return pool.filter((s) => {
+    const n = moraCount(s.reading);
+    if (difficulty === 'short') return n <= 7;
+    if (difficulty === 'medium') return n > 7 && n <= 13;
+    return n > 13;
+  });
+}
+
 function buildSentencePool(difficulty) {
-  let pool = SENTENCES;
-  if (difficulty && difficulty !== 'random') {
-    pool = pool.filter((s) => {
-      const n = moraCount(s.reading);
-      if (difficulty === 'short') return n <= 10;
-      if (difficulty === 'medium') return n > 10 && n <= 15;
-      return n > 15;
-    });
-  }
+  const pool = filterByDifficulty(SENTENCES, difficulty);
   return pool.length ? pool : SENTENCES;
 }
 
@@ -651,6 +684,10 @@ function loadNextSentence(session) {
   session.idx = 0;
   session.buffer = '';
   session.committed = [];
+
+  // 次の文をプレビュー用に確保（消費はしない）
+  if (!session.queue.length) session.queue = shuffle(session.pool);
+  session.nextSentence = session.queue.length ? session.queue[session.queue.length - 1] : null;
 }
 
 $('#btn-start-game').addEventListener('click', () => { if (capturePidOrShowError()) startGameFlow(); });
@@ -692,26 +729,43 @@ function processChar(ch) {
   if (!mora) return;
   const tentative = game.buffer + ch;
   const exact = mora.options.find((c) => c === tentative);
-  if (exact) {
+  // 「ん」は options=['n','nn'] のように短い選択肢が長い選択肢の接頭辞になっている。
+  // 完全一致していても、まだ長い選択肢へ伸ばせる余地があり、かつ最後のモーラでなければ
+  // すぐには確定しない（そうしないと "n" を2回打った2打目が次のモーラへの誤入力として
+  // 扱われてしまう）。最後のモーラなら、それ以上入力が来ないので即座に確定する。
+  const hasLongerOption = mora.options.some((c) => c.length > tentative.length && c.startsWith(tentative));
+  const isLastMora = game.idx === game.moras.length - 1;
+
+  if (exact && (!hasLongerOption || isLastMora)) {
     game.totalCorrect++;
-    game.committed[game.idx] = exact;
-    game.idx++;
-    game.buffer = '';
-    if (game.idx >= game.moras.length) {
-      game.sentencesCompleted++;
-      triggerSentenceCompleteEffect();
-      loadNextSentence(game);
-    }
-  } else if (mora.options.some((c) => c.startsWith(tentative))) {
+    finishMora(exact);
+  } else if (hasLongerOption) {
     game.buffer = tentative;
     game.totalCorrect++;
   } else {
+    const bufferExact = mora.options.find((c) => c === game.buffer);
+    if (bufferExact) {
+      finishMora(bufferExact);
+      processChar(ch);
+      return;
+    }
     game.totalMistakes++;
     const el = $('#game-romaji');
     el.classList.add('mistake-flash');
     setTimeout(() => el.classList.remove('mistake-flash'), 150);
   }
   renderGame();
+}
+
+function finishMora(exactOption) {
+  game.committed[game.idx] = exactOption;
+  game.idx++;
+  game.buffer = '';
+  if (game.idx >= game.moras.length) {
+    game.sentencesCompleted++;
+    triggerSentenceCompleteEffect();
+    loadNextSentence(game);
+  }
 }
 
 function renderGame() {
@@ -727,6 +781,10 @@ function renderGame() {
     return `<span class="rj-pending">${m.options[0]}</span>`;
   });
   $('#game-romaji').innerHTML = parts.join('');
+  const nextPreview = $('#game-next-preview');
+  if (nextPreview) {
+    nextPreview.textContent = game.nextSentence ? `次: ${game.nextSentence.kanji}` : '';
+  }
   updateHud();
   renderSidePanel();
 }
@@ -804,6 +862,16 @@ function finishSession() {
 
 function onGameFinished(result) {
   const stats = getStats();
+
+  // クリア判定・連続記録の更新は、statsを今回の結果で書き換える「前」に行う。
+  const clearStatus = evaluateClearStatus(result);
+  if (clearStatus.cleared) {
+    stats.currentStreak = (stats.currentStreak || 0) + 1;
+    stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
+  } else {
+    stats.currentStreak = 0;
+  }
+
   stats.sessionsCompleted++;
   stats.totalCorrectChars += result.correctKeystrokes;
   stats.totalPlayTimeSec += result.elapsedSec;
@@ -836,12 +904,11 @@ function onGameFinished(result) {
   appendLog(sessionLogRecord);
   saveSessionToVercelDb(sessionLogRecord);
 
-  renderPostgame(result, stats);
+  renderPostgame(result, stats, clearStatus);
   showScreen('screen-postgame');
 }
 
-function renderPostgame(result, stats) {
-  const clearStatus = evaluateClearStatus(result);
+function renderPostgame(result, stats, clearStatus) {
   const bannerEl = $('#clear-status-banner');
   if (bannerEl) {
     bannerEl.className = `clear-banner ${clearStatus.cleared ? 'cleared' : 'failed'}`;
@@ -866,6 +933,7 @@ function renderPostgame(result, stats) {
     <p style="font-size:1.3rem;">${stars}</p>
     <p>通算クリア回数: <strong>${stats.sessionsCompleted}</strong> 回 / 現在の称号: <strong>${badge ? badge.name : 'なし'}</strong></p>
     ${next ? `<p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回</p>` : '<p class="hint">全称号を獲得しました！</p>'}
+    <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
     ${renderPersonalHistoryHtml(stats, result.cpm)}
   `;
 
@@ -873,6 +941,12 @@ function renderPostgame(result, stats) {
   if (pidNote) {
     pidNote.textContent = appState.participantId ? `参加者番号: ${appState.participantId}` : '';
     pidNote.style.display = appState.participantId ? 'block' : 'none';
+  }
+
+  // アンケートへの案内は、合計15分（900秒）以上プレイしてから表示する
+  const surveyBox = $('#survey-cta-box');
+  if (surveyBox) {
+    surveyBox.style.display = stats.totalPlayTimeSec >= 900 ? 'block' : 'none';
   }
 
   $('#log-count').textContent = getLog().length;

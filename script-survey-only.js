@@ -102,7 +102,7 @@ const SENTENCES = [
   { kanji: 'コンビニでスイーツを買う', reading: 'こんびにですいーつをかう', category: 'daily' },
   { kanji: 'お茶を淹れてホッと一息', reading: 'おちゃをいれてほっとひといき', category: 'daily' },
   { kanji: '机の上を綺麗に片付ける', reading: 'つくえのうえをきれいにかたづける', category: 'daily' },
-  { kanji: '郵便受けに手紙が入っていた', reading: 'ゆうびんうけにてがみがいっていた', category: 'daily' },
+  { kanji: '郵便受けに手紙が入っていた', reading: 'ゆうびんうけにてがみがはいっていた', category: 'daily' },
   { kanji: '近所の人とすれ違って挨拶した', reading: 'きんじょのひととすれちがってあいさつした', category: 'daily' },
   { kanji: '階段を上ると息が切れる', reading: 'かいだんをのぼるといきがきれる', category: 'daily' },
   { kanji: '信号が青に変わるのを待つ', reading: 'しんごうがあおにかわるのをまつ', category: 'daily' },
@@ -146,7 +146,7 @@ const SENTENCES = [
   { kanji: '山頂からの眺めは最高だ', reading: 'さんちょうからのながめはさいこうだ', category: 'nature' },
   { kanji: '野生の動物と遭遇した', reading: 'やせいのどうぶつとそうぐうした', category: 'nature' },
   { kanji: '星空を見上げて星座を探す', reading: 'ほしぞらをみあげてせいざをさがす', category: 'nature' },
-  { kanji: '雷の音が遠くで鳴っている', reading: 'かみなりのあとがとおくでなっている', category: 'nature' },
+  { kanji: '雷の音が遠くで鳴っている', reading: 'かみなりのおとがとおくでなっている', category: 'nature' },
   { kanji: '冷たい湧き水でのどを潤す', reading: 'つめたいわきみずでのどをうるおす', category: 'nature' },
   { kanji: '霧が晴れて景色が現れる', reading: 'きりがはれてけしきがあらわれる', category: 'nature' },
   { kanji: '自然の摂理に思いを馳せる', reading: 'しぜんのせつりにおもいをはせる', category: 'nature' },
@@ -156,7 +156,7 @@ const SENTENCES = [
   { kanji: '夕日が沈む海を眺める', reading: 'ゆうひがしずむうみをながめる', category: 'nature' },
   { kanji: '鳥が群れをなして飛んでいく', reading: 'とりがむれをなしてとんでいく', category: 'nature' },
   { kanji: '雨水が葉からこぼれ落ちる', reading: 'あまみずがはからこぼれおちる', category: 'nature' },
-  { kanji: '失敗は成功のもとである', reading: 'しっぱいばせいこうのもとである', category: 'motivation' },
+  { kanji: '失敗は成功のもとである', reading: 'しっぱいはせいこうのもとである', category: 'motivation' },
   { kanji: '一歩踏み出す勇気を持とう', reading: 'いっぽふみだすゆうきをもとう', category: 'motivation' },
   { kanji: '昨日の自分より今日の自分', reading: 'きのうのじぶんよりきょうのじぶん', category: 'motivation' },
   { kanji: 'ピンチはチャンスに変わる', reading: 'ぴんちはちゃんすにかわる', category: 'motivation' },
@@ -366,7 +366,113 @@ const DEFAULT_STATS = {
   communityTotal: 0,
   freeSpirit: { category: 'random' },
   disruptor: { rule: 'chaos' },
+  currentStreak: 0,
+  bestStreak: 0,
+  bestSessionChars: 0,
+  bestSessionSentences: 0,
+  bestDisruptorScore: 0,
+  targetLevel: 'standard',
 };
+
+// 目標レベル（達成者・社交家・変革者で手動調整可能。倍率で基準値を伸縮する）
+const TARGET_LEVELS = {
+  easy:     { label: '初級', mult: 0.8 },
+  standard: { label: '標準', mult: 1.0 },
+  hard:     { label: '上級', mult: 1.3 },
+  extreme:  { label: '超級', mult: 1.6 },
+};
+
+// 自己ベストを上回ったら、目標値そのものを際限なく引き上げる
+function risingTarget(base, best, margin) {
+  return best > 0 && best + margin > base ? best + margin : base;
+}
+
+/* ============================================================
+   メインタイプ以外の「準タイプ」判定
+   非メインタイプのスコアが一定以上なら、そのタイプの要素を少しだけ混ぜる。
+   ============================================================ */
+const SECONDARY_SCORE_THRESHOLD = 60;
+
+function getSecondaryType(hexadResult) {
+  if (!hexadResult || !hexadResult.scores) return null;
+  const primary = hexadResult.primaryType;
+  let best = null;
+  let bestScore = -Infinity;
+  for (const t of HEXAD_ORDER) {
+    if (t === primary) continue;
+    const s = Number(hexadResult.scores[t]);
+    if (!Number.isNaN(s) && s >= SECONDARY_SCORE_THRESHOLD && s > bestScore) {
+      bestScore = s;
+      best = t;
+    }
+  }
+  return best;
+}
+
+// typesのいずれかがメインならfullChance、準タイプならlightChance、どちらでもなければ0を返す
+function typeChance(hexadResult, types, fullChance, lightChance) {
+  if (!hexadResult) return 0;
+  if (types.includes(hexadResult.primaryType)) return fullChance;
+  const secondary = getSecondaryType(hexadResult);
+  if (secondary && types.includes(secondary)) return lightChance;
+  return 0;
+}
+
+const THANKS_MESSAGES = [
+  '誰かがあなたの練習で少し救われました',
+  '小さな貢献が積み重なっています',
+  'あなたの一打が誰かの力になっています',
+  '見えないところで役に立っています',
+];
+
+// 記録されているリーダーボード内での自分の順位を算出（社交家用）
+function computeGlobalRank(stats, myCpm) {
+  const board = stats.leaderboard || [];
+  if (!board.length || myCpm == null) return null;
+  const better = board.filter((r) => r.cpm > myCpm).length;
+  return { rank: better + 1, total: board.length };
+}
+
+const SECONDARY_TOUCH_SETUP_TEXT = {
+  achiever: '🔥 連続クリアも少し記録されます',
+  player: '🎁 まれにボーナスがもらえることがあります',
+  socialiser: '🏅 プレイ後、記録内での順位の目安も表示されます',
+  freeSpirit: '🌟 たまに「レア文」が出てくることがあります',
+  philanthropist: '💚 あなたの練習が誰かの役に立っています',
+  disruptor: '⚡ たまに型破りな演出が起こることがあります',
+};
+
+// セットアップ画面用：準タイプがあれば、その要素をごく短く予告する
+function secondaryTouchSetupHtml(hexadResult) {
+  const secondary = getSecondaryType(hexadResult);
+  if (!secondary) return '';
+  const text = SECONDARY_TOUCH_SETUP_TEXT[secondary];
+  if (!text) return '';
+  return `<p class="hint secondary-touch" style="margin-top:10px;color:${HEXAD_TYPES[secondary].color}">${text}</p>`;
+}
+
+// 結果画面用：準タイプがあれば、実際のデータを少しだけ添える
+function secondaryTouchPostHtml(hexadResult, stats, result) {
+  const secondary = getSecondaryType(hexadResult);
+  if (!secondary) return '';
+  let text = '';
+  if (secondary === 'achiever' && stats.currentStreak > 0) {
+    text = `🔥 連続クリア: ${stats.currentStreak}回`;
+  } else if (secondary === 'player') {
+    text = '🎁 プレイ中、まれにボーナスが発生します';
+  } else if (secondary === 'socialiser') {
+    const info = computeGlobalRank(stats, result.cpm);
+    if (info) text = `🏅 参考: 記録内で上位${info.rank}位相当`;
+  } else if (secondary === 'freeSpirit') {
+    text = '🌟 たまに「レア文」が出てくることがあります';
+  } else if (secondary === 'philanthropist') {
+    text = '💚 あなたの練習が誰かの役に立っています';
+  } else if (secondary === 'disruptor') {
+    text = '⚡ 型にとらわれない一面も少し見えました';
+  }
+  if (!text) return '';
+  return `<p class="hint secondary-touch" style="margin-top:10px;color:${HEXAD_TYPES[secondary].color}">${text}</p>`;
+}
 
 /* ============================================================
    タイピング練習のクリア/非クリア判定
@@ -374,17 +480,24 @@ const DEFAULT_STATS = {
 function evaluateClearStatus(result, type) {
   const diff = appState.setup.difficulty || 'random';
   const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
-  
+  const stats = getStats();
+  const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
+
   let targetCpm = 150;
   if (diff === 'short') targetCpm = 120;
   if (diff === 'long') targetCpm = 180;
+  targetCpm = Math.round(targetCpm * levelMult);
+  const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
+  targetCpm = risingTarget(targetCpm, bestCpm, 10);
 
   let targetChars = 100;
   if (timeLimit) {
     targetChars = Math.floor(timeLimit * 1.5);
   }
+  targetChars = risingTarget(targetChars, stats.bestSessionChars || 0, 20);
 
-  const targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
+  let targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
+  targetSentences = risingTarget(targetSentences, stats.bestSessionSentences || 0, 1);
 
   switch (type) {
     case 'achiever': {
@@ -392,8 +505,8 @@ function evaluateClearStatus(result, type) {
       return {
         cleared: isAchieverCleared,
         title: isAchieverCleared ? '🎉 STAGE CLEAR (目標達成!)' : '❌ FAILED (クリアならず...)',
-        desc: isAchieverCleared 
-          ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！` 
+        desc: isAchieverCleared
+          ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！`
           : `目標基準: ${targetCpm} CPM & 正確率90% 以上 (今回: ${result.cpm} CPM / 正確率 ${result.accuracy}%)`
       };
     }
@@ -402,8 +515,8 @@ function evaluateClearStatus(result, type) {
       return {
         cleared: isPlayerCleared,
         title: isPlayerCleared ? '🪙 CLEAR (ノルマ達成!)' : '❌ FAILED (獲得目標 未達)',
-        desc: isPlayerCleared 
-          ? `ノルマ達成！ +${result.correctKeystrokes + 20} コインを獲得しました！` 
+        desc: isPlayerCleared
+          ? `ノルマ達成！ +${result.correctKeystrokes + 20} コインを獲得しました！`
           : `目標ノルマ: ${targetChars}文字(コイン)以上を入力 (今回: ${result.correctKeystrokes}文字)`
       };
     }
@@ -412,32 +525,34 @@ function evaluateClearStatus(result, type) {
       return {
         cleared: isSocialiserCleared,
         title: isSocialiserCleared ? '🎖️ CLEAR (目標ランク突破!)' : '❌ FAILED (ランク未達)',
-        desc: isSocialiserCleared 
-          ? `目標ランク基準(${targetCpm}CPM)を突破しました！` 
+        desc: isSocialiserCleared
+          ? `目標ランク基準(${targetCpm}CPM)を突破しました！`
           : `目標ランク基準: ${targetCpm} CPM以上 (今回: ${result.cpm} CPM)`
       };
     }
     case 'disruptor': {
       const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-      const targetScore = timeLimit ? timeLimit * 2 : 150;
+      let targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * levelMult);
+      targetScore = risingTarget(targetScore, stats.bestDisruptorScore || 0, 20);
       const isDisruptorCleared = score >= targetScore;
       return {
         cleared: isDisruptorCleared,
         title: isDisruptorCleared ? '⚡ CLEAR (特殊ルール突破!)' : '❌ FAILED (スコア目標未達)',
-        desc: isDisruptorCleared 
-          ? `ルール「${rule.label}」で ${score} pt を獲得し、クリアしました！` 
+        desc: isDisruptorCleared
+          ? `ルール「${rule.label}」で ${score} pt を獲得し、クリアしました！`
           : `クリア目標: ${targetScore} pt 以上 (今回: ${score} pt)`
       };
     }
     case 'philanthropist': {
-      const targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
+      let targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
+      targetPhilChars = risingTarget(targetPhilChars, stats.bestSessionChars || 0, 15);
       const isPhilCleared = result.correctKeystrokes >= targetPhilChars;
       return {
         cleared: isPhilCleared,
         title: isPhilCleared ? '💚 CLEAR (貢献達成!)' : '❌ FAILED (貢献未達)',
-        desc: isPhilCleared 
-          ? `みんなの練習目標に ${result.correctKeystrokes} 文字貢献しました！` 
+        desc: isPhilCleared
+          ? `みんなの練習目標に ${result.correctKeystrokes} 文字貢献しました！`
           : `目標: ${targetPhilChars}文字以上の貢献 (今回: ${result.correctKeystrokes}文字)`
       };
     }
@@ -447,8 +562,8 @@ function evaluateClearStatus(result, type) {
       return {
         cleared: isFreeCleared,
         title: isFreeCleared ? '🌟 CLEAR (探求完了!)' : '❌ FAILED (未完了)',
-        desc: isFreeCleared 
-          ? `目標の ${targetSentences} 文以上をやり遂げました！` 
+        desc: isFreeCleared
+          ? `目標の ${targetSentences} 文以上をやり遂げました！`
           : `目標: ${targetSentences} 文以上タイピングを完了 (今回: ${result.sentencesCompleted}文)`
       };
     }
@@ -911,6 +1026,7 @@ function renderSetup() {
   body.innerHTML = chartHtml + '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
   renderSessionSettings(body.querySelector('.session-settings'), HEXAD_TYPES[type].color);
   builders[type](body.querySelector('.setup-type-body'), stats);
+  body.insertAdjacentHTML('beforeend', secondaryTouchSetupHtml(appState.hexadResult));
 }
 
 function renderSessionSettings(container, color) {
@@ -943,6 +1059,23 @@ function bindChipGroup(container, name, color, onSelect) {
   });
 }
 
+// 達成者・社交家・変革者で使う「目標レベル」の手動調整UI（自己ベスト更新でさらに上がるのは別途自動）
+function targetLevelSettingHtml(stats) {
+  return `
+    <div class="setup-row">
+      <h3>目標レベル</h3>
+      ${chipGroup('targetLevel', Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label })), stats.targetLevel || 'standard')}
+      <p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>
+    </div>
+  `;
+}
+function bindTargetLevel(body, color) {
+  bindChipGroup(body, 'targetLevel', color, (v) => {
+    appState.setup.targetLevel = v;
+    const s = getStats(); s.targetLevel = v; saveStats(s);
+  });
+}
+
 function setupAchiever(body, stats) {
   const badge = ACHIEVER_BADGES.filter((b) => stats.sessionsCompleted >= b.count).pop();
   const next = ACHIEVER_BADGES.find((b) => stats.sessionsCompleted < b.count);
@@ -952,10 +1085,13 @@ function setupAchiever(body, stats) {
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
       ${next ? `<div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (stats.sessionsCompleted / next.count) * 100)}%;background:${HEXAD_TYPES.achiever.color}"></div></div><p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回クリア</p>` : '<p class="hint">全ての称号を獲得済みです！</p>'}
+      <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
+    ${targetLevelSettingHtml(stats)}
   `;
+  bindTargetLevel(body, HEXAD_TYPES.achiever.color);
 }
 
 function setupPlayer(body, stats) {
@@ -994,7 +1130,9 @@ function setupSocialiser(body, stats) {
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
+    ${targetLevelSettingHtml(stats)}
   `;
+  bindTargetLevel(body, HEXAD_TYPES.socialiser.color);
 }
 
 function setupFreeSpirit(body, stats) {
@@ -1048,28 +1186,33 @@ function setupDisruptor(body, stats) {
       ${chipGroup('rule', Object.entries(DISRUPTOR_RULES).map(([v, r]) => ({ value: v, label: r.label })), stats.disruptor.rule)}
       <p class="hint">速さ優先＝CPM×2 / 正確さ優先＝正確率×10 / カオス＝CPM×正確率÷10</p>
     </div>
+    ${targetLevelSettingHtml(stats)}
   `;
   bindChipGroup(body, 'rule', HEXAD_TYPES.disruptor.color, (v) => {
     appState.setup.rule = v;
     const s = getStats(); s.disruptor.rule = v; saveStats(s);
   });
+  bindTargetLevel(body, HEXAD_TYPES.disruptor.color);
 }
 
 /* ============================================================
    5. ゲーム本体
    ============================================================ */
 
+function filterByDifficulty(pool, difficulty) {
+  if (!difficulty || difficulty === 'random') return pool;
+  return pool.filter((s) => {
+    const n = moraCount(s.reading);
+    if (difficulty === 'short') return n <= 7;
+    if (difficulty === 'medium') return n > 7 && n <= 13;
+    return n > 13;
+  });
+}
+
 function buildSentencePool(category, difficulty) {
   let pool = SENTENCES;
   if (category && category !== 'random') pool = pool.filter((s) => s.category === category);
-  if (difficulty && difficulty !== 'random') {
-    pool = pool.filter((s) => {
-      const n = moraCount(s.reading);
-      if (difficulty === 'short') return n <= 10;
-      if (difficulty === 'medium') return n > 10 && n <= 15;
-      return n > 15;
-    });
-  }
+  pool = filterByDifficulty(pool, difficulty);
   return pool.length ? pool : SENTENCES;
 }
 
@@ -1098,18 +1241,27 @@ function createSession(pool, timeLimitSec) {
 function loadNextSentence(session) {
   if (!session.queue.length) session.queue = shuffle(session.pool);
   session.sentence = session.queue.pop();
+
+  // 自由人（メインまたは準タイプ）: 選んだテーマは崩さず、たまに「レア文」として演出だけ特別になる
+  const hr = appState && appState.hexadResult;
+  const rareChance = typeChance(hr, ['freeSpirit'], 0.20, 0.08);
+  session.isRareSentence = rareChance > 0 && Math.random() < rareChance;
+
   session.moras = buildMoraList(session.sentence.reading);
   session.idx = 0;
   session.buffer = '';
   session.committed = [];
-  
+
+  // プレイヤー／変革者（メインまたは準タイプ）: 低確率でボーナス文（+30文字）
   session.isBonusSentence = false;
-  if (appState && appState.hexadResult) {
-    const t = appState.hexadResult.primaryType;
-    if ((t === 'freeSpirit' || t === 'disruptor') && Math.random() < 0.20) {
-      session.isBonusSentence = true;
-    }
+  const bonusChance = typeChance(hr, ['player', 'disruptor'], 0.20, 0.08);
+  if (Math.random() < bonusChance) {
+    session.isBonusSentence = true;
   }
+
+  // 次の文をプレビュー用に確保（消費はしない）
+  if (!session.queue.length) session.queue = shuffle(session.pool);
+  session.nextSentence = session.queue.length ? session.queue[session.queue.length - 1] : null;
 }
 
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
@@ -1151,23 +1303,29 @@ function processChar(ch) {
   if (!mora) return;
   const tentative = game.buffer + ch;
   const exact = mora.options.find((c) => c === tentative);
-  if (exact) {
+  // 「ん」は options=['n','nn'] のように短い選択肢が長い選択肢の接頭辞になっている。
+  // 完全一致していても、まだ長い選択肢へ伸ばせる余地があり、かつ最後のモーラでなければ
+  // すぐには確定しない（そうしないと "n" を2回打った2打目が次のモーラへの誤入力として
+  // 扱われてしまう）。最後のモーラなら、それ以上入力が来ないので即座に確定する。
+  const hasLongerOption = mora.options.some((c) => c.length > tentative.length && c.startsWith(tentative));
+  const isLastMora = game.idx === game.moras.length - 1;
+
+  if (exact && (!hasLongerOption || isLastMora)) {
     game.totalCorrect++;
-    game.committed[game.idx] = exact;
-    game.idx++;
-    game.buffer = '';
-    if (game.idx >= game.moras.length) {
-      game.sentencesCompleted++;
-      if (game.isBonusSentence) {
-        game.totalCorrect += 30;
-      }
-      triggerSentenceCompleteEffect(game.isBonusSentence);
-      loadNextSentence(game);
-    }
-  } else if (mora.options.some((c) => c.startsWith(tentative))) {
+    finishMora(exact);
+  } else if (hasLongerOption) {
     game.buffer = tentative;
     game.totalCorrect++;
   } else {
+    // 延長できず完全一致もしない場合、保留中のバッファ自体が既に完了済みの短い選択肢
+    // （例:「ん」を"n"だけ打って次のモーラへ進む場合）なら、それを確定してから
+    // 今回打った文字を次のモーラへの入力として再評価する。
+    const bufferExact = mora.options.find((c) => c === game.buffer);
+    if (bufferExact) {
+      finishMora(bufferExact);
+      processChar(ch);
+      return;
+    }
     game.totalMistakes++;
     const el = $('#game-romaji');
     el.classList.add('mistake-flash');
@@ -1176,14 +1334,33 @@ function processChar(ch) {
   renderGame();
 }
 
+function finishMora(exactOption) {
+  game.committed[game.idx] = exactOption;
+  game.idx++;
+  game.buffer = '';
+  if (game.idx >= game.moras.length) {
+    game.sentencesCompleted++;
+    if (game.isBonusSentence) {
+      game.totalCorrect += 30;
+    }
+    triggerSentenceCompleteEffect(game.isBonusSentence);
+    maybeShowThanksToast();
+    maybeTriggerDisruptorGlitch();
+    loadNextSentence(game);
+  }
+}
+
 function renderGame() {
   updateThemeColor();
   const sentenceEl = $('#game-sentence');
+  sentenceEl.classList.remove('bonus-sentence', 'rare-sentence');
   if (game.isBonusSentence) {
     sentenceEl.classList.add('bonus-sentence');
     $('#game-kanji').innerHTML = `✨ <span style="color:#eda100">${game.sentence.kanji}</span> ✨`;
+  } else if (game.isRareSentence) {
+    sentenceEl.classList.add('rare-sentence');
+    $('#game-kanji').innerHTML = `🌟 <span style="color:${HEXAD_TYPES.freeSpirit.color}">${game.sentence.kanji}</span> 🌟`;
   } else {
-    sentenceEl.classList.remove('bonus-sentence');
     $('#game-kanji').textContent = game.sentence.kanji;
   }
   $('#game-reading').textContent = game.sentence.reading;
@@ -1197,8 +1374,40 @@ function renderGame() {
     return `<span class="rj-pending">${m.options[0]}</span>`;
   });
   $('#game-romaji').innerHTML = parts.join('');
+  const nextPreview = $('#game-next-preview');
+  if (nextPreview) {
+    nextPreview.textContent = game.nextSentence ? `次: ${game.nextSentence.kanji}` : '';
+  }
   updateHud();
   renderSidePanel();
+}
+
+// 利他主義者（メインまたは準タイプ）: 低確率で「ありがとう」演出
+function maybeShowThanksToast() {
+  const chance = typeChance(appState.hexadResult, ['philanthropist'], 0.35, 0.12);
+  if (chance <= 0 || Math.random() >= chance) return;
+  const el = $('#game-sentence');
+  const msg = THANKS_MESSAGES[Math.floor(Math.random() * THANKS_MESSAGES.length)];
+  const toast = document.createElement('div');
+  toast.textContent = `💚 ${msg}`;
+  toast.style.cssText = 'position:absolute;bottom:8px;left:50%;transform:translateX(-50%);' +
+    `color:${HEXAD_TYPES.philanthropist.color};font-size:0.82rem;font-weight:600;` +
+    'pointer-events:none;animation:floatUp 1.6s ease forwards;white-space:nowrap;';
+  el.appendChild(toast);
+  setTimeout(() => toast.remove(), 1600);
+}
+
+// 変革者（メインまたは準タイプ）: 文完了時に専用エフェクト（毎回同じにならないよう複数パターンから抽選）
+const DISRUPTOR_EFFECTS = ['disruptor-flash-glitch', 'disruptor-flash-invert', 'disruptor-flash-wobble'];
+function maybeTriggerDisruptorGlitch() {
+  const chance = typeChance(appState.hexadResult, ['disruptor'], 0.7, 0.2);
+  if (chance <= 0 || Math.random() >= chance) return;
+  const el = $('#game-sentence');
+  DISRUPTOR_EFFECTS.forEach((c) => el.classList.remove(c));
+  void el.offsetWidth;
+  const effect = DISRUPTOR_EFFECTS[Math.floor(Math.random() * DISRUPTOR_EFFECTS.length)];
+  el.classList.add(effect);
+  setTimeout(() => el.classList.remove(effect), 500);
 }
 
 function triggerSentenceCompleteEffect(isBonus = false) {
@@ -1362,6 +1571,24 @@ function finishSession() {
 function onGameFinished(result) {
   const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
   const stats = getStats();
+
+  // クリア判定・連続記録・自己ベストの更新は、statsを今回の結果で書き換える「前」に行う。
+  // （そうしないと今回出した自己ベストがそのまま次の目標値になり、自己矛盾する）
+  const clearStatus = evaluateClearStatus(result, type);
+  if (clearStatus.cleared) {
+    stats.currentStreak = (stats.currentStreak || 0) + 1;
+    stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
+  } else {
+    stats.currentStreak = 0;
+  }
+  stats.bestSessionChars = Math.max(stats.bestSessionChars || 0, result.correctKeystrokes);
+  stats.bestSessionSentences = Math.max(stats.bestSessionSentences || 0, result.sentencesCompleted);
+  if (type === 'disruptor') {
+    const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
+    const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
+    stats.bestDisruptorScore = Math.max(stats.bestDisruptorScore || 0, score);
+  }
+
   stats.sessionsCompleted++;
   stats.totalCorrectChars += result.correctKeystrokes;
   stats.totalPlayTimeSec += result.elapsedSec;
@@ -1399,14 +1626,13 @@ function onGameFinished(result) {
   appendLog(sessionLogRecord);
   saveSessionToVercelDb(sessionLogRecord);
 
-  renderPostgame(result, stats, newUnlocks);
+  renderPostgame(result, stats, newUnlocks, clearStatus);
   showScreen('screen-postgame');
 }
 
-function renderPostgame(result, stats, newUnlocks) {
+function renderPostgame(result, stats, newUnlocks, clearStatus) {
   const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
-  
-  const clearStatus = evaluateClearStatus(result, type);
+
   const bannerEl = $('#clear-status-banner');
   if (bannerEl) {
     bannerEl.className = `clear-banner ${clearStatus.cleared ? 'cleared' : 'failed'}`;
@@ -1424,7 +1650,7 @@ function renderPostgame(result, stats, newUnlocks) {
   `;
 
   const builders = { achiever: postAchiever, player: postPlayer, socialiser: postSocialiser, freeSpirit: postFreeSpirit, philanthropist: postPhilanthropist, disruptor: postDisruptor };
-  $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks);
+  $('#postgame-gamification').innerHTML = builders[type](result, stats, newUnlocks) + secondaryTouchPostHtml(appState.hexadResult, stats, result);
 
   const pidNote = $('#participant-id-display');
   if (pidNote) {
@@ -1436,6 +1662,12 @@ function renderPostgame(result, stats, newUnlocks) {
     $('#rediagnose-row').style.display = 'flex';
   } else {
     $('#rediagnose-row').style.display = 'none';
+  }
+
+  // アンケートへの案内は、合計15分（900秒）以上プレイしてから表示する
+  const surveyBox = $('#survey-cta-box');
+  if (surveyBox) {
+    surveyBox.style.display = stats.totalPlayTimeSec >= 900 ? 'block' : 'none';
   }
 
   $('#log-count').textContent = getLog().length;
@@ -1450,6 +1682,7 @@ function postAchiever(result, stats) {
     <p style="font-size:1.3rem;">${stars}</p>
     <p>通算クリア回数: <strong>${stats.sessionsCompleted}</strong> 回 / 現在の称号: <strong>${badge ? badge.name : 'なし'}</strong></p>
     ${next ? `<p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回</p>` : '<p class="hint">全称号を獲得しました！</p>'}
+    <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
     ${renderPersonalHistoryHtml(stats, result.cpm)}
   `;
 }
@@ -1462,9 +1695,11 @@ function postPlayer(result, stats, newUnlocks) {
 }
 function postSocialiser(result, stats) {
   const grade = getGrade(result.cpm);
+  const rankInfo = computeGlobalRank(stats, result.cpm);
   return `
     <h3>今回の評価結果</h3>
     <p style="font-size:1.3rem;">あなたの判定: <strong style="color:${grade.color};">${grade.grade}</strong> (${result.cpm} CPM)</p>
+    ${rankInfo ? `<p>🏅 記録内での順位: <strong>上位 ${rankInfo.rank}位</strong> / ${rankInfo.total}件中</p>` : ''}
     ${renderPersonalHistoryHtml(stats, result.cpm)}
     ${renderGradeTableHtml(result.cpm)}
   `;
