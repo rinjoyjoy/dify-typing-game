@@ -236,7 +236,7 @@ const SENTENCES = [
   { kanji: '光陰矢の如し', reading: 'こういんやのごとし', category: 'proverb' },
   { kanji: '初心忘るべからず', reading: 'しょしんわするべからず', category: 'proverb' },
   { kanji: '案ずるより産むが易し', reading: 'あんずるよりうむがやすし', category: 'proverb' },
-  { kanji: '鬼に金棒', reading: 'おにのかなぼう', category: 'proverb' },
+  { kanji: '鬼に金棒', reading: 'おににかなぼう', category: 'proverb' },
   { kanji: '灯台下暗し', reading: 'とうだいもとくらし', category: 'proverb' },
   { kanji: '親しき中にも礼儀あり', reading: 'したしきなかにもれいぎあり', category: 'proverb' },
   { kanji: '口は災いの元', reading: 'くちはわざわいのもと', category: 'proverb' },
