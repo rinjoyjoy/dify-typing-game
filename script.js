@@ -1257,7 +1257,6 @@ $('#btn-rediagnose').addEventListener('click', () => {
    ============================================================ */
 
 function renderSetup() {
-  updateThemeColor();
   const type = appState.hexadResult.primaryType;
   const stats = getStats();
   $('#setup-title').textContent = `練習の準備 — ${HEXAD_TYPES[type].label}`;
@@ -1272,11 +1271,16 @@ function renderSetup() {
     philanthropist: setupPhilanthropist,
     disruptor: setupDisruptor,
   };
-  appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60' };
+  // アバターカラーを選べるタイプ（プレイヤー・自由人）は、保存済みの色をここで先に反映しておく。
+  // こうしないと下のupdateThemeColor()やチップの色が、直後に各setupX()内で改めて
+  // 設定されるまで古い色のまま（またはタイプの既定色）になってしまう。
+  const initialAvatarColor = (type === 'player' || type === 'freeSpirit') ? stats.selectedColor : undefined;
+  appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60', avatarColor: initialAvatarColor };
+  updateThemeColor();
 
   // 設定・操作系はスタートボタンの上（#setup-body）、ランキングや指標等はボタンの下（#setup-stats-body）に表示する
   body.innerHTML = '<div class="setup-row session-settings"></div><div class="setup-type-body"></div>';
-  renderSessionSettings(body.querySelector('.session-settings'), HEXAD_TYPES[type].color);
+  renderSessionSettings(body.querySelector('.session-settings'), initialAvatarColor || HEXAD_TYPES[type].color);
 
   const res = appState.hexadResult;
   let chartHtml = '';
@@ -1411,6 +1415,7 @@ function setupPlayer(body, statsBody, stats) {
       body.querySelectorAll('.color-swatch').forEach((s) => s.classList.remove('selected'));
       sw.classList.add('selected');
       appState.setup.avatarColor = color;
+      updateThemeColor();
       const s = getStats(); s.selectedColor = color; saveStats(s);
     });
   });
@@ -1456,7 +1461,7 @@ function setupFreeSpirit(body, statsBody, stats) {
       </div>
     </div>
   `;
-  bindChipGroup(body, 'category', HEXAD_TYPES.freeSpirit.color, (v) => {
+  bindChipGroup(body, 'category', appState.setup.avatarColor || HEXAD_TYPES.freeSpirit.color, (v) => {
     appState.setup.category = v;
     const s = getStats(); s.freeSpirit.category = v; saveStats(s);
   });
@@ -1465,6 +1470,7 @@ function setupFreeSpirit(body, statsBody, stats) {
       body.querySelectorAll('.color-swatch').forEach((s) => s.classList.remove('selected'));
       sw.classList.add('selected');
       appState.setup.avatarColor = sw.dataset.color;
+      updateThemeColor();
       const s = getStats(); s.selectedColor = sw.dataset.color; saveStats(s);
     });
   });
@@ -1665,7 +1671,7 @@ function renderGame() {
     $('#game-kanji').innerHTML = `✨ <span style="color:#eda100">${game.sentence.kanji}</span> ✨`;
   } else if (game.isRareSentence) {
     sentenceEl.classList.add('rare-sentence');
-    $('#game-kanji').innerHTML = `🌟 <span style="color:${HEXAD_TYPES.freeSpirit.color}">${game.sentence.kanji}</span> 🌟`;
+    $('#game-kanji').innerHTML = `🌟 <span style="color:${appState.setup.avatarColor || HEXAD_TYPES.freeSpirit.color}">${game.sentence.kanji}</span> 🌟`;
   } else {
     $('#game-kanji').textContent = game.sentence.kanji;
   }
@@ -1811,7 +1817,7 @@ function vizPlayer() {
   const pct = next ? (projected / next.coins) * 100 : 100;
   return `
     <p class="hint">🪙 このプレイでの獲得コイン: <strong>${game.totalCorrect}</strong>（合計見込み ${projected}）</p>
-    ${barRow(next ? '次の解放' : '全解放済み', pct, `${Math.round(pct)}%`, HEXAD_TYPES.player.color)}
+    ${barRow(next ? '次の解放' : '全解放済み', pct, `${Math.round(pct)}%`, appState.setup.avatarColor || HEXAD_TYPES.player.color)}
   `;
 }
 
@@ -2000,7 +2006,7 @@ function postPlayer(result, stats, newUnlocks) {
   return `
     <h3>報酬</h3>
     <p>獲得コイン: <strong>+${result.correctKeystrokes + 20}</strong> 🪙（合計 ${stats.coins}）</p>
-    ${newUnlocks.length ? `<p class="hint" style="color:${HEXAD_TYPES.player.color}">新しいアバターカラーを解放しました！</p>` : ''}
+    ${newUnlocks.length ? `<p class="hint" style="color:${appState.setup.avatarColor || HEXAD_TYPES.player.color}">新しいアバターカラーを解放しました！</p>` : ''}
   `;
 }
 function postSocialiser(result, stats) {
