@@ -271,6 +271,20 @@ const DISRUPTOR_RULES = {
   accuracy: { label: '正確さ優先ルール',     calc: (cpm, acc, total) => Math.round((total * 5 + cpm) * Math.pow(acc / 100, 4)) },
   chaos:    { label: 'カオスルール',         calc: (cpm, acc, total) => Math.round((cpm * acc * total) / 1000) },
 };
+const DEFAULT_DISRUPTOR_CUSTOM_WEIGHTS = { cpm: 1.5, acc: 1, chars: 0.5 };
+
+// 変革者: 既存3ルールに加え、自分で採点式そのものを作れる「カスタムルール」を返す
+// （Hexadの変革者＝「システムそのものに手を加えたい」という動機に対応）
+function getDisruptorRule(ruleKey, stats) {
+  if (ruleKey === 'custom') {
+    const w = (stats && stats.disruptor && stats.disruptor.customWeights) || DEFAULT_DISRUPTOR_CUSTOM_WEIGHTS;
+    return {
+      label: 'カスタムルール（自作）',
+      calc: (cpm, acc, total) => Math.round(cpm * w.cpm + acc * w.acc + total * w.chars),
+    };
+  }
+  return DISRUPTOR_RULES[ruleKey] || DISRUPTOR_RULES.chaos;
+}
 
 const GRADE_TABLE = [
   { min: 300, grade: 'Sランク', desc: '神速レベル（プロ級）', color: '#e34948' },
@@ -368,7 +382,7 @@ const DEFAULT_STATS = {
   leaderboard: [],
   communityTotal: 0,
   freeSpirit: { category: 'random' },
-  disruptor: { rule: 'chaos' },
+  disruptor: { rule: 'chaos', customWeights: { cpm: 1.5, acc: 1, chars: 0.5 } },
   currentStreak: 0,
   bestStreak: 0,
   bestSessionChars: 0,
@@ -465,6 +479,39 @@ function computeGlobalRank(stats, myCpm) {
   return { rank: better + 1, total: board.length };
 }
 
+// 社交家用：記録の中で自分のすぐ上にいる「次のライバル」（他の参加者）を探す
+function findNextRival(stats, myCpm) {
+  const others = (stats.leaderboard || []).filter((r) => r.name !== appState.nickname);
+  const above = others.filter((r) => r.cpm > (myCpm == null ? -Infinity : myCpm)).sort((a, b) => a.cpm - b.cpm);
+  return above.length ? above[0] : null;
+}
+
+// 社交家用：他の参加者の記録を偽りなく「みんなの記録」として見せる（自己ベスト表と違い、実際に他者が見える）
+function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
+  const board = (stats.leaderboard || []).slice().sort((a, b) => b.cpm - a.cpm);
+  if (!board.length) {
+    return `<div class="community-board-box" style="margin-top:12px;"><p class="hint">まだ記録がありません。あなたが最初の記録を作りましょう！</p></div>`;
+  }
+  const top = board.slice(0, 5);
+  return `
+    <div class="community-board-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
+      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">🌐 みんなの記録 TOP 5</h3>
+      <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
+        ${top.map((r, idx) => {
+          const isMe = r.name === appState.nickname && currentCpm !== null && r.cpm === currentCpm;
+          const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '';
+          return `
+            <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isMe ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
+              <span>第${idx + 1}位 ${isMe ? '🌟 今回' : ''} ${r.name === appState.nickname ? '（あなた）' : escapeHtml(r.name)}</span>
+              <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
+            </li>
+          `;
+        }).join('')}
+      </ul>
+    </div>
+  `;
+}
+
 const SECONDARY_TOUCH_SETUP_TEXT = {
   achiever: '🔥 連続クリアも少し記録されます',
   player: '🎁 まれにボーナスがもらえることがあります',
@@ -551,17 +598,22 @@ function evaluateClearStatus(result, type) {
       };
     }
     case 'socialiser': {
-      const isSocialiserCleared = result.cpm >= targetCpm;
+      // 社交家: 抽象的な基準値ではなく、記録の中の「次のライバル」（実在の他の参加者）に勝てたかどうかで判定する
+      // （Hexadの社交家＝他者とのつながり・比較が動機のため。自己ベストの追求は達成者と被ってしまう）
+      const rival = findNextRival(stats, result.cpm);
+      const isSocialiserCleared = !rival || result.cpm > rival.cpm;
       return {
         cleared: isSocialiserCleared,
-        title: isSocialiserCleared ? '🎖️ CLEAR (目標ランク突破!)' : '❌ FAILED (ランク未達)',
+        title: isSocialiserCleared
+          ? (rival ? `🎖️ CLEAR (${rival.name}を抜きました!)` : '🎖️ CLEAR (現在みんなの中でトップです!)')
+          : '❌ FAILED (ライバルに届かず...)',
         desc: isSocialiserCleared
-          ? `目標ランク基準(${targetCpm}CPM)を突破しました！`
-          : `目標ランク基準: ${targetCpm} CPM以上 (今回: ${result.cpm} CPM)`
+          ? (rival ? `${rival.cpm} CPMの${rival.name}さんを上回る ${result.cpm} CPM を記録しました！` : `記録の中で最速タイでした！ (${result.cpm} CPM)`)
+          : `次のライバル「${rival.name}」(${rival.cpm} CPM) まであと ${rival.cpm - result.cpm} CPM (今回: ${result.cpm} CPM)`
       };
     }
     case 'disruptor': {
-      const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
+      const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
       let targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * levelMult);
       targetScore = risingTarget(targetScore, stats.bestDisruptorScore || 0, 20);
@@ -748,6 +800,9 @@ function capturePidOrShowError() {
   }
   appState.participantId = raw;
   if (!appState.group) appState.group = DEFAULT_GROUP;
+  // ニックネームは「参加者番号」に基づいて設定する（社交家のみんなの記録欄で、誰が誰か区別できるようにするため）
+  appState.nickname = `参加者${appState.participantId}`;
+  localStorage.setItem(STORAGE_KEYS.nickname, appState.nickname);
   try { localStorage.setItem(PARTICIPANT_STORAGE_KEY, JSON.stringify({ pid: appState.participantId, group: appState.group })); } catch (e) {}
   return true;
 }
@@ -861,8 +916,6 @@ function initWelcomeScreen() {
   $('#btn-start-survey').addEventListener('click', () => {
     if (!capturePidOrShowError()) return;
     appState.classifyMethod = 'survey';
-    appState.nickname = 'ゲスト';
-    localStorage.setItem(STORAGE_KEYS.nickname, appState.nickname);
     renderSurveyForm();
     showScreen('screen-survey');
   });
@@ -1013,8 +1066,6 @@ function triggerRediagnose() {
   if (confirm('現在の診断結果をリセットし、もう一度アンケートからやり直しますか？\n（スコアや獲得コイン等の実績は維持されます）')) {
     localStorage.removeItem(STORAGE_KEYS.hexadResult);
     appState.hexadResult = null;
-    appState.nickname = 'ゲスト';
-    localStorage.setItem(STORAGE_KEYS.nickname, appState.nickname);
     const s = getStats(); s.fullTimeStreak = 0; s.rediagnosePromptShown = false; saveStats(s);
     renderSurveyForm();
     showScreen('screen-survey');
@@ -1233,16 +1284,15 @@ function setupPlayer(body, statsBody, stats) {
 }
 
 function setupSocialiser(body, statsBody, stats) {
+  const rival = findNextRival(stats, -Infinity);
   body.innerHTML = `
-    <p class="lead">タイピング速度の評価基準と自分の過去ベストを目標に高みを目指しましょう。</p>
-    ${targetLevelSettingHtml(stats, 'customTargetCpm', 'CPM')}
+    <p class="lead">他の参加者の記録と競い合いましょう。次に打てば、記録の中のすぐ上にいる人を抜けるかもしれません。</p>
+    ${rival ? `<p class="hint">🎯 次のライバル: <strong style="color:${HEXAD_TYPES.socialiser.color};">${escapeHtml(rival.name)}</strong>（${rival.cpm} CPM）</p>` : '<p class="hint">🏆 現在みんなの中でトップです。自己記録の更新を目指しましょう。</p>'}
   `;
-  bindTargetLevel(body, HEXAD_TYPES.socialiser.color, 'customTargetCpm');
 
   statsBody.innerHTML = `
     <div class="setup-row">
-      ${renderPersonalHistoryHtml(stats)}
-      ${renderGradeTableHtml()}
+      ${renderCommunityLeaderboardHtml(stats)}
     </div>
   `;
 }
@@ -1293,20 +1343,51 @@ function setupPhilanthropist(body, statsBody, stats) {
 
 function setupDisruptor(body, statsBody, stats) {
   appState.setup.rule = stats.disruptor.rule;
+  if (!stats.disruptor.customWeights) { stats.disruptor.customWeights = { ...DEFAULT_DISRUPTOR_CUSTOM_WEIGHTS }; saveStats(stats); }
+  const w = stats.disruptor.customWeights;
+  const ruleOptions = [...Object.entries(DISRUPTOR_RULES).map(([v, r]) => ({ value: v, label: r.label })), { value: 'custom', label: '⚡ カスタムルール（自作）' }];
   body.innerHTML = `
-    <p class="lead">自分でスコアのルールを書き換えられます。既存のやり方にとらわれず、好きなルールを選びましょう。</p>
+    <p class="lead">自分でスコアのルールを書き換えられます。既存のやり方にとらわれず、好きなルールを選ぶか、自分だけの採点式を作りましょう。</p>
     <div class="setup-row">
       <h3>スコアルール</h3>
-      ${chipGroup('rule', Object.entries(DISRUPTOR_RULES).map(([v, r]) => ({ value: v, label: r.label })), stats.disruptor.rule)}
+      ${chipGroup('rule', ruleOptions, stats.disruptor.rule)}
       <p class="hint">速さ優先＝CPM×2 / 正確さ優先＝正確率×10 / カオス＝CPM×正確率÷10</p>
+      <div id="disruptor-custom-editor" style="display:${stats.disruptor.rule === 'custom' ? 'block' : 'none'}; margin-top:10px; padding:10px; background:rgba(0,0,0,0.03); border-radius:8px;">
+        <p class="hint">スコア = 速度×<strong id="w-cpm-val">${w.cpm}</strong> + 正確率×<strong id="w-acc-val">${w.acc}</strong> + 打鍵数×<strong id="w-chars-val">${w.chars}</strong></p>
+        <label style="display:block;margin-top:6px;">速度の重み<input type="range" id="w-cpm" min="0" max="3" step="0.1" value="${w.cpm}" style="width:100%;"></label>
+        <label style="display:block;margin-top:6px;">正確率の重み<input type="range" id="w-acc" min="0" max="3" step="0.1" value="${w.acc}" style="width:100%;"></label>
+        <label style="display:block;margin-top:6px;">打鍵数の重み<input type="range" id="w-chars" min="0" max="3" step="0.1" value="${w.chars}" style="width:100%;"></label>
+      </div>
     </div>
     ${targetLevelSettingHtml(stats, 'customTargetScore', 'pt')}
   `;
   bindChipGroup(body, 'rule', HEXAD_TYPES.disruptor.color, (v) => {
     appState.setup.rule = v;
     const s = getStats(); s.disruptor.rule = v; saveStats(s);
+    const editor = body.querySelector('#disruptor-custom-editor');
+    if (editor) editor.style.display = v === 'custom' ? 'block' : 'none';
   });
   bindTargetLevel(body, HEXAD_TYPES.disruptor.color, 'customTargetScore');
+
+  ['cpm', 'acc', 'chars'].forEach((key) => {
+    const input = body.querySelector(`#w-${key}`);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const val = Number(input.value);
+      body.querySelector(`#w-${key}-val`).textContent = val;
+      const s = getStats();
+      if (!s.disruptor.customWeights) s.disruptor.customWeights = { ...DEFAULT_DISRUPTOR_CUSTOM_WEIGHTS };
+      s.disruptor.customWeights[key] = val;
+      saveStats(s);
+    });
+  });
+
+  statsBody.innerHTML = `
+    <div class="setup-row">
+      <h3>自己ベストスコア</h3>
+      <p style="font-size:1.4rem;font-weight:700;color:${HEXAD_TYPES.disruptor.color}">${stats.bestDisruptorScore || 0} pt</p>
+    </div>
+  `;
 }
 
 /* ============================================================
@@ -1592,13 +1673,15 @@ function updateHud() {
 
 function hudAchiever() { return `<div class="hud-item">正打数<strong>${game.totalCorrect}</strong></div>`; }
 function hudPlayer() { return `<div class="hud-item">獲得コイン<strong>🪙 ${game.totalCorrect}</strong></div>`; }
-function hudSocialiser() { 
-  const g = getGrade(currentCpm()); 
-  return `<div class="hud-item">評価ランク<strong style="color:${g.color};">${g.grade}</strong></div>`; 
+function hudSocialiser() {
+  const rival = findNextRival(getStats(), currentCpm());
+  return rival
+    ? `<div class="hud-item">${escapeHtml(rival.name)}まで<strong style="color:${HEXAD_TYPES.socialiser.color};">${Math.max(0, rival.cpm - currentCpm())}</strong></div>`
+    : `<div class="hud-item">現在<strong style="color:${HEXAD_TYPES.socialiser.color};">トップ</strong></div>`;
 }
 function hudFreeSpirit() { return ''; }
 function hudPhilanthropist() { const s = getStats(); return `<div class="hud-item">貢献合計<strong>${s.communityTotal + game.totalCorrect} 文字</strong></div>`; }
-function hudDisruptor() { return `<div class="hud-item">ルール<strong>${DISRUPTOR_RULES[appState.setup.rule].label}</strong></div>`; }
+function hudDisruptor() { return `<div class="hud-item">ルール<strong>${getDisruptorRule(appState.setup.rule, getStats()).label}</strong></div>`; }
 
 function renderSidePanel() {
   const type = appState.hexadResult.primaryType;
@@ -1644,10 +1727,12 @@ function vizPlayer() {
 
 function vizSocialiser() {
   const mine = currentCpm();
-  const grade = getGrade(mine);
+  const stats = getStats();
+  const rival = findNextRival(stats, mine);
+  const rankInfo = computeGlobalRank(stats, mine);
   return `
-    <p class="hint">現在の速度評価</p>
-    <p style="font-size:1.3rem;"><strong style="color:${grade.color};">${grade.grade}</strong> (${grade.desc})</p>
+    <p class="hint">${rankInfo ? `記録内での順位: 上位${rankInfo.rank}位 / ${rankInfo.total}件中` : '記録内での順位: まだ記録がありません'}</p>
+    <p style="font-size:1.3rem;">${rival ? `🎯 <strong style="color:${HEXAD_TYPES.socialiser.color};">${escapeHtml(rival.name)}</strong> まであと ${Math.max(0, rival.cpm - mine)} CPM` : '🏆 現在みんなの中でトップです！'}</p>
     ${barRow('あなたの速度', (mine / 300) * 100, `${mine} CPM`, HEXAD_TYPES.socialiser.color)}
   `;
 }
@@ -1674,7 +1759,7 @@ function vizPhilanthropist() {
 }
 
 function vizDisruptor() {
-  const rule = DISRUPTOR_RULES[appState.setup.rule];
+  const rule = getDisruptorRule(appState.setup.rule, getStats());
   const score = rule.calc(currentCpm(), currentAccuracy(), game ? game.totalCorrect : 0);
   return `
     <p class="hint">適用ルール: ${rule.label}</p>
@@ -1718,8 +1803,10 @@ function onGameFinished(result, isFullTime) {
 
   // 難易度を手動調整できないタイプ（プレイヤー・自由人・利他主義者）は、
   // クリアすれば目標が上がり、失敗すれば少し下がる（きつくなりすぎないように）。
-  // 難易度を選べるタイプ（達成者・社交家・変革者）は目標レベルで自分で調整できるため、
+  // 難易度を選べるタイプ（達成者・変革者）は目標レベルで自分で調整できるため、
   // 従来通り自己ベストに応じて上がり続けるだけにする。
+  // 社交家は自己ベストではなく「記録内の実在のライバル」との比較なので、ここでの状態更新は不要
+  // （目標は常にリーダーボードから動的に算出され、失敗しても難しくなり続けることはない）。
   if (type === 'player' || type === 'philanthropist') {
     if (clearStatus.cleared) {
       stats.bestSessionChars = Math.max(stats.bestSessionChars || 0, result.correctKeystrokes);
@@ -1733,7 +1820,7 @@ function onGameFinished(result, isFullTime) {
       stats.bestSessionSentences = Math.max(0, Math.round(stats.bestSessionSentences * 0.85));
     }
   } else if (type === 'disruptor') {
-    const rule = DISRUPTOR_RULES[appState.setup.rule || 'chaos'];
+    const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
     const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
     stats.bestDisruptorScore = Math.max(stats.bestDisruptorScore || 0, score);
   }
@@ -1846,14 +1933,15 @@ function postPlayer(result, stats) {
   `;
 }
 function postSocialiser(result, stats) {
-  const grade = getGrade(result.cpm);
   const rankInfo = computeGlobalRank(stats, result.cpm);
+  const rival = findNextRival(stats, result.cpm);
   return `
-    <h3>今回の評価結果</h3>
-    <p style="font-size:1.3rem;">あなたの判定: <strong style="color:${grade.color};">${grade.grade}</strong> (${result.cpm} CPM)</p>
-    ${rankInfo ? `<p>🏅 記録内での順位: <strong>上位 ${rankInfo.rank}位</strong> / ${rankInfo.total}件中</p>` : ''}
-    ${renderPersonalHistoryHtml(stats, result.cpm)}
-    ${renderGradeTableHtml(result.cpm)}
+    <h3>みんなとの比較</h3>
+    ${rankInfo ? `<p style="font-size:1.3rem;">🏅 記録内での順位: <strong style="color:${HEXAD_TYPES.socialiser.color};">上位 ${rankInfo.rank}位</strong> / ${rankInfo.total}件中</p>` : ''}
+    ${rival
+      ? `<p class="hint">🎯 次のライバル: <strong>${escapeHtml(rival.name)}</strong>（${rival.cpm} CPM）まであと ${Math.max(0, rival.cpm - result.cpm)} CPM</p>`
+      : '<p class="hint">🏆 現在みんなの中でトップです！</p>'}
+    ${renderCommunityLeaderboardHtml(stats, result.cpm)}
   `;
 }
 function postFreeSpirit(result) {
@@ -1872,14 +1960,15 @@ function postPhilanthropist(result, stats) {
     <p>あなたの練習が、目標達成に近づく力になりました。</p>
   `;
 }
-function postDisruptor(result) {
-  const rule = DISRUPTOR_RULES[appState.setup.rule];
+function postDisruptor(result, stats) {
+  const rule = getDisruptorRule(appState.setup.rule, stats);
   const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
   return `
     <h3>あなたのルールでのスコア</h3>
     <p>適用ルール: <strong>${rule.label}</strong></p>
     <p style="font-size:1.6rem;font-weight:700;color:${HEXAD_TYPES.disruptor.color}">${score} pt</p>
-    <p class="hint">既存の採点基準にとらわれず、自分で選んだルールで評価しました。</p>
+    <p class="hint">自己ベスト: ${stats.bestDisruptorScore || 0} pt</p>
+    <p class="hint">既存の採点基準にとらわれず、自分で選んだ（あるいは自分で作った）ルールで評価しました。</p>
   `;
 }
 

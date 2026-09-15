@@ -528,6 +528,8 @@ function capturePidOrShowError() {
   }
   appState.participantId = raw;
   if (!appState.group) appState.group = DEFAULT_GROUP;
+  // ニックネームは「参加者番号」に基づいて設定する（共有記録上で、誰が誰か区別できるようにするため）
+  appState.nickname = `参加者${appState.participantId}`;
   try { localStorage.setItem(PARTICIPANT_STORAGE_KEY, JSON.stringify({ pid: appState.participantId, group: appState.group })); } catch (e) {}
   return true;
 }

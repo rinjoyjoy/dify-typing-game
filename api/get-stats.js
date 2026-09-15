@@ -29,10 +29,15 @@ module.exports = async function handler(req, res) {
     `;
     const typeSummaryResult = await query(typeSummaryQuery);
 
-    // 4. トップリーダーボード (TOP 20)
+    // 4. トップリーダーボード (TOP 20、参加者ごとの自己ベスト1件のみ・社交家機能で実在の他者と比較するために使用)
     const leaderboardQuery = `
       SELECT id, nickname, hexad_type, cpm, accuracy, created_at
-      FROM typing_sessions
+      FROM (
+        SELECT DISTINCT ON (COALESCE(participant_id::text, nickname))
+          id, nickname, hexad_type, cpm, accuracy, created_at
+        FROM typing_sessions
+        ORDER BY COALESCE(participant_id::text, nickname), cpm DESC
+      ) best_per_participant
       ORDER BY cpm DESC, accuracy DESC
       LIMIT 20
     `;
