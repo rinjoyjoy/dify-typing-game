@@ -351,7 +351,7 @@ function isCustomTargetUnlocked(stats) {
   return (stats.sessionsCompleted || 0) >= CUSTOM_TARGET_UNLOCK_COUNT;
 }
 
-// 自己ベストを上回ったら、目標値そのものを際限なく引き上げる
+// 自己ベストを上回ったら、目標値そのものを際限なく引き上げる（チャレンジモード専用）
 function risingTarget(base, best, margin) {
   return best > 0 && best + margin > base ? best + margin : base;
 }
@@ -361,17 +361,28 @@ function risingTarget(base, best, margin) {
    ============================================================ */
 function evaluateClearStatus(result) {
   const diff = appState.setup.difficulty || 'random';
-  const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
   const stats = getStats();
-  const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
   const useCustomTarget = stats.targetLevel === 'custom' && isCustomTargetUnlocked(stats);
+  const useChallengeTarget = stats.targetLevel === 'challenge' && isCustomTargetUnlocked(stats);
 
-  let targetCpm = 150;
-  if (diff === 'short') targetCpm = 120;
-  if (diff === 'long') targetCpm = 180;
-  targetCpm = useCustomTarget ? Math.max(1, Math.round(Number(stats.customTargetCpm) || targetCpm)) : Math.round(targetCpm * levelMult);
-  const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
-  targetCpm = risingTarget(targetCpm, bestCpm, 10);
+  let baseCpm = 150;
+  if (diff === 'short') baseCpm = 120;
+  if (diff === 'long') baseCpm = 180;
+
+  let targetCpm;
+  if (useCustomTarget) {
+    // カスタム: 指定した数値がそのまま目標（自己ベストの影響を受けない固定値）
+    targetCpm = Math.max(1, Math.round(Number(stats.customTargetCpm) || baseCpm));
+  } else if (useChallengeTarget) {
+    // チャレンジ: 自己ベストを更新するたびに目標が際限なく上がり続ける
+    const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
+    const challengeBase = Math.round(baseCpm * TARGET_LEVELS.extreme.mult);
+    targetCpm = risingTarget(challengeBase, bestCpm, 10);
+  } else {
+    // 初級/標準/上級/超級: 難易度×倍率で決まる固定値（自己ベストの影響を受けない）
+    const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
+    targetCpm = Math.round(baseCpm * levelMult);
+  }
 
   const isCleared = result.cpm >= targetCpm && result.accuracy >= 90;
   return {
@@ -604,8 +615,11 @@ function renderSetup() {
 
   const unlocked = isCustomTargetUnlocked(stats);
   const targetOptions = Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label }));
-  if (unlocked) targetOptions.push({ value: 'custom', label: '🔓 カスタム' });
-  const selectedLevel = (stats.targetLevel === 'custom' && !unlocked) ? 'standard' : (stats.targetLevel || 'standard');
+  if (unlocked) {
+    targetOptions.push({ value: 'custom', label: '🔓 カスタム' });
+    targetOptions.push({ value: 'challenge', label: '🔥 チャレンジ' });
+  }
+  const selectedLevel = ((stats.targetLevel === 'custom' || stats.targetLevel === 'challenge') && !unlocked) ? 'standard' : (stats.targetLevel || 'standard');
   const isCustom = selectedLevel === 'custom';
   const customValue = stats.customTargetCpm != null ? stats.customTargetCpm : 200;
 
@@ -615,8 +629,8 @@ function renderSetup() {
       <h3>目標レベル</h3>
       ${chipGroup('targetLevel', targetOptions, selectedLevel)}
       ${unlocked
-        ? '<p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>'
-        : `<p class="hint">🔒 通算${CUSTOM_TARGET_UNLOCK_COUNT}回クリアすると、数値を直接指定できる「カスタム」が解放されます（現在 ${stats.sessionsCompleted || 0}回）。</p>`}
+        ? '<p class="hint">🔓 カスタム／チャレンジが解放されています。カスタムは指定した数値がそのまま固定の目標に、チャレンジは自己ベストを更新するたびに目標が際限なく上がり続けます。</p>'
+        : `<p class="hint">🔒 通算${CUSTOM_TARGET_UNLOCK_COUNT}回クリアすると、数値を直接指定できる「カスタム」と、自己ベスト更新のたびに目標が際限なく上がる「チャレンジ」が解放されます（現在 ${stats.sessionsCompleted || 0}回）。</p>`}
       <div class="target-custom-input" style="margin-top:10px; ${isCustom ? '' : 'display:none;'}">
         <label for="target-custom-value" style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">目標値を直接指定（CPM）</label>
         <input type="number" id="target-custom-value" min="1" step="1" value="${customValue}" style="width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--baseline); background:var(--page); color:var(--text-primary);">
@@ -740,6 +754,7 @@ $('#btn-start-game').addEventListener('click', () => { if (capturePidOrShowError
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
 $('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
+$('#btn-goto-survey-export')?.addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(); });
 
 function startGameFlow() {
@@ -753,6 +768,7 @@ function startGameFlow() {
 function onGameKeydown(e) {
   if (!document.getElementById('screen-game').classList.contains('active')) return;
   if (!game || game.endTime) return;
+  if (e.repeat) { e.preventDefault(); return; } // キー長押しのOS自動リピートで正打数が水増しされるのを防ぐ
   if (e.key === 'Backspace') { game.buffer = ''; renderGame(); e.preventDefault(); return; }
   if (!/^[a-zA-Z\-]$/.test(e.key)) return;
   e.preventDefault();
@@ -924,8 +940,13 @@ function onGameFinished(result) {
   stats.totalCorrectChars += result.correctKeystrokes;
   stats.totalPlayTimeSec += result.elapsedSec;
 
-  stats.leaderboard.push({ name: appState.nickname, cpm: result.cpm, accuracy: result.accuracy, date: new Date().toISOString() });
-  stats.leaderboard = stats.leaderboard.sort((a, b) => b.cpm - a.cpm).slice(0, 20);
+  // 極端に短い（一瞬で終了した）セッションはCPMが跳ね上がりやすく、自己ベストとして
+  // risingTargetに採用されると目標が実態とかけ離れて固定されてしまうため、リーダーボードには反映しない。
+  const MIN_LEADERBOARD_ELAPSED_SEC = 3;
+  if (result.elapsedSec >= MIN_LEADERBOARD_ELAPSED_SEC) {
+    stats.leaderboard.push({ name: appState.nickname, cpm: result.cpm, accuracy: result.accuracy, date: new Date().toISOString() });
+    stats.leaderboard = stats.leaderboard.sort((a, b) => b.cpm - a.cpm).slice(0, 20);
+  }
 
   saveStats(stats);
 
@@ -991,16 +1012,18 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、合計15分（900秒）以上プレイしてから表示する
+  // アンケートへの案内・研究データのエクスポートは、保存済みログの合計プレイ時間が
+  // 15分（900秒）以上になってから表示する（「記録を削除」でログを消せばゲートも連動してリセットされる）
   // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const timeGateMet = stats.totalPlayTimeSec >= 900;
+  const loggedPlayTimeSec = getLog().reduce((sum, r) => sum + (Number(r.elapsedSec) || 0), 0);
+  const timeGateMet = loggedPlayTimeSec >= 900;
   const surveyBox = $('#survey-cta-box');
   if (surveyBox) {
     surveyBox.style.display = timeGateMet ? 'block' : 'none';
   }
   const exportUi = $('#secret-export-ui');
-  if (exportUi && timeGateMet) {
-    exportUi.style.display = 'block';
+  if (exportUi) {
+    exportUi.style.display = timeGateMet ? 'block' : 'none';
   }
 
   $('#log-count').textContent = getLog().length;
