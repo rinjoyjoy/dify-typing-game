@@ -1003,15 +1003,30 @@ function renderPostgame(result, stats, clearStatus) {
   }
 
   $('#log-count').textContent = getLog().length;
+  updateSurveyStepState();
 }
 
 /* ============================================================
    データエクスポート
    ============================================================ */
 
-$('#btn-export-json').addEventListener('click', () => {
-  downloadBlob(`typing_log_${Date.now()}.json`, JSON.stringify(getLog(), null, 2), 'application/json');
-});
+
+const CSV_DL_KEY = 'gtp_csv_downloaded_count';
+// STEP 1（CSVダウンロード）が済むまでは、STEP 2（アンケート）のボタンを押せないようにする。
+// 新しいプレイ記録が増えたら、もう一度ダウンロードするまで再び無効になる。
+function updateSurveyStepState() {
+  const btn = $('#btn-goto-survey');
+  if (!btn) return;
+  let downloaded = 0;
+  try { downloaded = Number(localStorage.getItem(CSV_DL_KEY)) || 0; } catch (e) {}
+  const logCount = getLog().length;
+  const done = logCount > 0 && downloaded >= logCount;
+  btn.disabled = !done;
+  const note = $('#survey-step-note');
+  if (note) note.style.display = done ? 'none' : 'block';
+  const step1 = $('#secret-export-ui');
+  if (step1) step1.classList.toggle('done', done);
+}
 
 $('#btn-export-csv').addEventListener('click', () => {
   const log = getLog();
@@ -1020,13 +1035,8 @@ $('#btn-export-csv').addEventListener('click', () => {
   const header = cols.join(',');
   const rows = log.map((r) => cols.map((c) => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(','));
   downloadBlob(`typing_log_${Date.now()}.csv`, '\uFEFF' + [header, ...rows].join('\n'), 'text/csv');
-});
-
-$('#btn-clear-log').addEventListener('click', () => {
-  if (confirm('この端末に保存された全てのセッション記録を削除します。よろしいですか？')) {
-    localStorage.removeItem(STORAGE_KEYS.log);
-    $('#log-count').textContent = '0';
-  }
+  try { localStorage.setItem(CSV_DL_KEY, String(log.length)); } catch (e) {}
+  updateSurveyStepState();
 });
 
 /* ============================================================

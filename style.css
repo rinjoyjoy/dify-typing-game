@@ -573,3 +573,22 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 }
 .record-banner strong { font-family: "JetBrains Mono", Consolas, monospace; font-size: 1.15em; }
 .record-best { text-align: center; margin: 0 0 16px; }
+
+/* ---------- 研究参加の手順（STEP 1: CSV → STEP 2: アンケート） ---------- */
+.study-step {
+  margin: 20px 0 12px; padding: 16px;
+  border: 1.5px solid var(--ink); border-radius: 6px;
+  background: var(--surface-1); text-align: center;
+}
+.study-step h3 { margin: 4px 0 6px; }
+.study-step .hint { margin: 0 0 12px; }
+.study-step .btn { width: 100%; }
+.step-label {
+  display: inline-block; margin: 0 0 6px; padding: 1px 10px;
+  font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--page); background: var(--ink); border-radius: 3px;
+}
+.study-step.done .step-label { background: var(--good); color: #fff; }
+.study-step.done .step-label::after { content: " 完了"; }
+.survey-cta-box .step-label { margin-bottom: 8px; }
+.survey-cta-box .btn:disabled { box-shadow: 0 2px 0 var(--ink); }

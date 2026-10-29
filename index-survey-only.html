@@ -108,10 +108,19 @@
 
         <div id="postgame-rediagnose-prompt"></div>
 
+        <div class="study-step" id="secret-export-ui" style="display: none;">
+          <p class="step-label">STEP 1</p>
+          <h3>研究データをダウンロード</h3>
+          <p class="hint">この端末に保存されたプレイ記録（<span id="log-count">0</span>件）をCSVで保存してください。</p>
+          <button id="btn-export-csv" class="btn btn-primary">CSVをダウンロード</button>
+        </div>
+
         <div class="survey-cta-box" id="survey-cta-box">
+          <p class="step-label">STEP 2</p>
           <p class="survey-cta-text">プレイありがとうございました！最後にアンケートへのご協力をお願いします。</p>
           <p id="participant-id-display" class="hint" style="display:none;"></p>
-          <button id="btn-goto-survey" class="btn btn-primary"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>アンケートに回答する</button>
+          <button id="btn-goto-survey" class="btn btn-primary" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>アンケートに回答する</button>
+          <p id="survey-step-note" class="hint">STEP 1 のCSVダウンロード後に押せるようになります。</p>
         </div>
 
         <div class="button-row">
@@ -120,15 +129,6 @@
         </div>
 
 
-        <details class="export-details" id="secret-export-ui" style="display: none;">
-          <summary>研究データのエクスポート</summary>
-          <p class="hint">この端末に保存されたセッション記録（<span id="log-count">0</span>件）を書き出します。</p>
-          <div class="button-row">
-            <button id="btn-export-json" class="btn btn-tertiary">JSONで書き出す</button>
-            <button id="btn-export-csv" class="btn btn-tertiary">CSVで書き出す</button>
-            <button id="btn-clear-log" class="btn btn-danger">記録を削除</button>
-          </div>
-        </details>
       </div>
     </section>
 
