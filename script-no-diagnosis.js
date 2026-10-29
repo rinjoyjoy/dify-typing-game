@@ -618,15 +618,17 @@ function renderSetup() {
 }
 
 function renderSessionSettings(container, color) {
+  // 文の長さを選べるのは自由人のみ（他のタイプは「おまかせ」固定）
+  const canPickLength = 'achiever' === 'freeSpirit';
   container.innerHTML = `
     <h3>制限時間</h3>
     ${chipGroup('timeLimit', TIME_OPTIONS, appState.setup.timeLimit)}
     <p class="hint">1回のプレイで、時間内または「終了して結果を見る」を押すまで複数の文を連続して出題します。</p>
-    <h3>難易度（文の長さ）</h3>
-    ${chipGroup('difficulty', DIFFICULTY_OPTIONS, appState.setup.difficulty)}
+    ${canPickLength ? `<h3>難易度（文の長さ）</h3>
+    ${chipGroup('difficulty', DIFFICULTY_OPTIONS, appState.setup.difficulty)}` : ''}
   `;
   bindChipGroup(container, 'timeLimit', color, (v) => { appState.setup.timeLimit = v; });
-  bindChipGroup(container, 'difficulty', color, (v) => { appState.setup.difficulty = v; });
+  if (canPickLength) bindChipGroup(container, 'difficulty', color, (v) => { appState.setup.difficulty = v; });
 }
 
 function chipGroup(name, options, selected) {

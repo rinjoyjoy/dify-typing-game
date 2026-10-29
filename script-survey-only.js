@@ -1105,10 +1105,10 @@ function renderSetup() {
     philanthropist: setupPhilanthropist,
     disruptor: setupDisruptor,
   };
-  // アバターカラーを選べるタイプ（プレイヤー・自由人）は、保存済みの色をここで先に反映しておく。
+  // アバターカラーを選べるのはコインで購入できるプレイヤーのみ。保存済みの色をここで先に反映しておく。
   // こうしないと下のupdateThemeColor()やチップの色が、直後に各setupX()内で改めて
   // 設定されるまで古い色のまま（またはタイプの既定色）になってしまう。
-  const initialAvatarColor = (type === 'player' || type === 'freeSpirit') ? stats.selectedColor : undefined;
+  const initialAvatarColor = type === 'player' ? stats.selectedColor : undefined;
   appState.setup = { category: 'random', difficulty: 'random', timeLimit: TYPE_DEFAULT_TIME[type] || '60', avatarColor: initialAvatarColor };
   updateThemeColor();
 
@@ -1146,15 +1146,17 @@ function renderSetup() {
 }
 
 function renderSessionSettings(container, color) {
+  // 文の長さを選べるのは自由人のみ（他のタイプは「おまかせ」固定）
+  const canPickLength = (appState.hexadResult && appState.hexadResult.primaryType) === 'freeSpirit';
   container.innerHTML = `
     <h3>制限時間</h3>
     ${chipGroup('timeLimit', TIME_OPTIONS, appState.setup.timeLimit)}
     <p class="hint">1回のプレイで、時間内または「終了して結果を見る」を押すまで複数の文を連続して出題します。</p>
-    <h3>難易度（文の長さ）</h3>
-    ${chipGroup('difficulty', DIFFICULTY_OPTIONS, appState.setup.difficulty)}
+    ${canPickLength ? `<h3>難易度（文の長さ）</h3>
+    ${chipGroup('difficulty', DIFFICULTY_OPTIONS, appState.setup.difficulty)}` : ''}
   `;
   bindChipGroup(container, 'timeLimit', color, (v) => { appState.setup.timeLimit = v; });
-  bindChipGroup(container, 'difficulty', color, (v) => { appState.setup.difficulty = v; });
+  if (canPickLength) bindChipGroup(container, 'difficulty', color, (v) => { appState.setup.difficulty = v; });
 }
 
 function chipGroup(name, options, selected) {
@@ -1264,32 +1266,17 @@ function setupSocialiser(body, statsBody, stats) {
 
 function setupFreeSpirit(body, statsBody, stats) {
   appState.setup.category = stats.freeSpirit.category;
-  appState.setup.avatarColor = stats.selectedColor;
+  // アバターカラーはプレイヤーがコインで購入する要素のため、自由人には解放しない
   body.innerHTML = `
-    <p class="lead">自分の好きなテーマ・見た目を自由に選んでください(長さや時間は上の設定で調整できます)。</p>
+    <p class="lead">自分の好きなテーマを自由に選んでください（文の長さや時間は上の設定で調整できます）。</p>
     <div class="setup-row">
       <h3>テーマ</h3>
       ${chipGroup('category', [{ value: 'random', label: 'おまかせ' }, ...Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))], stats.freeSpirit.category)}
     </div>
-    <div class="setup-row">
-      <h3>アバターカラー（自由に選択可）</h3>
-      <div class="color-swatch-group">
-        ${AVATAR_COLORS.map((c) => `<span class="color-swatch${c === stats.selectedColor ? ' selected' : ''}" data-color="${c}" style="background:${c}"></span>`).join('')}
-      </div>
-    </div>
   `;
-  bindChipGroup(body, 'category', appState.setup.avatarColor || HEXAD_TYPES.freeSpirit.color, (v) => {
+  bindChipGroup(body, 'category', HEXAD_TYPES.freeSpirit.color, (v) => {
     appState.setup.category = v;
     const s = getStats(); s.freeSpirit.category = v; saveStats(s);
-  });
-  body.querySelectorAll('.color-swatch').forEach((sw) => {
-    sw.addEventListener('click', () => {
-      body.querySelectorAll('.color-swatch').forEach((s) => s.classList.remove('selected'));
-      sw.classList.add('selected');
-      appState.setup.avatarColor = sw.dataset.color;
-      updateThemeColor();
-      const s = getStats(); s.selectedColor = sw.dataset.color; saveStats(s);
-    });
   });
 }
 
