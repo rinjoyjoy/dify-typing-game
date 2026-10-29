@@ -52,6 +52,6 @@ module.exports = async function handler(req, res) {
     });
   } catch (err) {
     console.error('Error fetching stats:', err);
-    return res.status(500).json({ error: 'Database fetch failed', details: err.message });
+    return res.status(500).json({ error: 'Database fetch failed' });
   }
 };

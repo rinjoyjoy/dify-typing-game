@@ -3,9 +3,16 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { message, conversation_id } = req.body;
-  if (!message) {
+  const { message, conversation_id } = req.body || {};
+  if (typeof message !== 'string' || !message.trim()) {
     return res.status(400).json({ error: 'Message is required' });
+  }
+  if (message.length > 4000) {
+    return res.status(400).json({ error: 'Message is too long' });
+  }
+  if (conversation_id !== undefined && conversation_id !== null && conversation_id !== '' &&
+      (typeof conversation_id !== 'string' || !/^[0-9a-zA-Z-]{1,64}$/.test(conversation_id))) {
+    return res.status(400).json({ error: 'Invalid conversation_id' });
   }
 
   const DIFY_API_KEY = process.env.DIFY_API_KEY;
@@ -36,13 +43,14 @@ export default async function handler(req, res) {
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ error: `Dify API error: ${errText}` });
+      console.error('Dify API error:', response.status, await response.text());
+      return res.status(502).json({ error: 'Upstream API error' });
     }
 
     const data = await response.json();
     res.status(200).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('chat handler error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 }

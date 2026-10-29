@@ -316,7 +316,7 @@ function renderGradeTableHtml(userCpm = null) {
             const isMatch = currentGrade === g.grade;
             return `
               <tr style="${isMatch ? 'background:rgba(42,120,214,0.18); font-weight:bold;' : ''} border-bottom:1px solid #eee;">
-                <td style="padding:6px; color:${g.color};">${g.grade} ${isMatch ? '👈 あなた' : ''}</td>
+                <td style="padding:6px; color:${g.color};">${g.grade} ${isMatch ? 'あなた' : ''}</td>
                 <td style="padding:6px;">${g.min === 0 ? '100未満' : g.min + ' 文字/分〜'}</td>
                 <td style="padding:6px; font-size:0.85rem; color:#555;">${g.desc}</td>
               </tr>
@@ -335,14 +335,14 @@ function renderPersonalHistoryHtml(stats, currentCpm = null) {
   }
   return `
     <div class="personal-history-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
-      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">🏆 あなたの自己ベスト TOP 5（個人記録）</h3>
+      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">${icon('trophy')}あなたの自己ベスト TOP 5（個人記録）</h3>
       <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
         ${top.map((r, idx) => {
           const isCurrent = currentCpm !== null && r.cpm === currentCpm;
           const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '';
           return `
             <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isCurrent ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
-              <span>第${idx + 1}位 ${isCurrent ? '🌟 今回' : ''}</span>
+              <span>第${idx + 1}位 ${isCurrent ? '今回' : ''}</span>
               <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
             </li>
           `;
@@ -495,14 +495,14 @@ function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
   const top = board.slice(0, 5);
   return `
     <div class="community-board-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
-      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">🌐 みんなの記録 TOP 5</h3>
+      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">${icon('globe')}みんなの記録 TOP 5</h3>
       <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
         ${top.map((r, idx) => {
           const isMe = r.name === appState.nickname && currentCpm !== null && r.cpm === currentCpm;
           const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '';
           return `
             <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isMe ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
-              <span>第${idx + 1}位 ${isMe ? '🌟 今回' : ''} ${r.name === appState.nickname ? '（あなた）' : escapeHtml(r.name)}</span>
+              <span>第${idx + 1}位 ${isMe ? '今回' : ''} ${r.name === appState.nickname ? '（あなた）' : escapeHtml(r.name)}</span>
               <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
             </li>
           `;
@@ -513,11 +513,11 @@ function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
 }
 
 const SECONDARY_TOUCH_SETUP_TEXT = {
-  achiever: '🔥 連続クリアも少し記録されます',
-  player: '🎁 まれにボーナスがもらえることがあります',
-  socialiser: '🏅 プレイ後、記録内での順位の目安も表示されます',
-  philanthropist: '💚 あなたの練習が誰かの役に立っています',
-  disruptor: '⚡ たまに型破りな演出が起こることがあります',
+  achiever: '連続クリアも少し記録されます',
+  player: 'まれにボーナスがもらえることがあります',
+  socialiser: 'プレイ後、記録内での順位の目安も表示されます',
+  philanthropist: 'あなたの練習が誰かの役に立っています',
+  disruptor: 'たまに型破りな演出が起こることがあります',
 };
 
 // セットアップ画面用：準タイプがあれば、その要素をごく短く予告する
@@ -535,16 +535,16 @@ function secondaryTouchPostHtml(hexadResult, stats, result) {
   if (!secondary) return '';
   let text = '';
   if (secondary === 'achiever' && stats.currentStreak > 0) {
-    text = `🔥 連続クリア: ${stats.currentStreak}回`;
+    text = `連続クリア: ${stats.currentStreak}回`;
   } else if (secondary === 'player') {
-    text = '🎁 プレイ中、まれにボーナスが発生します';
+    text = 'プレイ中、まれにボーナスが発生します';
   } else if (secondary === 'socialiser') {
     const info = computeGlobalRank(stats, result.cpm);
-    if (info) text = `🏅 参考: 記録内で上位${info.rank}位相当`;
+    if (info) text = `参考: 記録内で上位${info.rank}位相当`;
   } else if (secondary === 'philanthropist') {
-    text = '💚 あなたの練習が誰かの役に立っています';
+    text = 'あなたの練習が誰かの役に立っています';
   } else if (secondary === 'disruptor') {
-    text = '⚡ 型にとらわれない一面も少し見えました';
+    text = '型にとらわれない一面も少し見えました';
   }
   if (!text) return '';
   return `<p class="hint secondary-touch" style="margin-top:10px;color:${HEXAD_TYPES[secondary].color}">${text}</p>`;
@@ -557,31 +557,24 @@ function evaluateClearStatus(result, type) {
   const diff = appState.setup.difficulty || 'random';
   const timeLimit = appState.setup.timeLimit === 'none' ? null : Number(appState.setup.timeLimit);
   const stats = getStats();
-  const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
-  const useCustomTarget = stats.targetLevel === 'custom' && isCustomTargetUnlocked(stats);
 
-  let targetCpm = 150;
-  if (diff === 'short') targetCpm = 120;
-  if (diff === 'long') targetCpm = 180;
-  targetCpm = useCustomTarget ? Math.max(1, Math.round(Number(stats.customTargetCpm) || targetCpm)) : Math.round(targetCpm * levelMult);
-  const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
-  targetCpm = risingTarget(targetCpm, bestCpm, 10);
+  let targetCpm = 120;
+  if (diff === 'short') targetCpm = 100;
+  if (diff === 'long') targetCpm = 150;
 
   let targetChars = 100;
   if (timeLimit) {
     targetChars = Math.floor(timeLimit * 1.5);
   }
-  targetChars = risingTarget(targetChars, stats.bestSessionChars || 0, 20);
 
-  let targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
-  targetSentences = risingTarget(targetSentences, stats.bestSessionSentences || 0, 1);
+  const targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
 
   switch (type) {
     case 'achiever': {
       const isAchieverCleared = result.cpm >= targetCpm && result.accuracy >= 90;
       return {
         cleared: isAchieverCleared,
-        title: isAchieverCleared ? '🎉 STAGE CLEAR (目標達成!)' : '❌ FAILED (クリアならず...)',
+        title: isAchieverCleared ? icon('check') + 'STAGE CLEAR (目標達成!)' : icon('x') + 'FAILED (クリアならず...)',
         desc: isAchieverCleared
           ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！`
           : `目標基準: ${targetCpm} CPM & 正確率90% 以上 (今回: ${result.cpm} CPM / 正確率 ${result.accuracy}%)`
@@ -591,7 +584,7 @@ function evaluateClearStatus(result, type) {
       const isPlayerCleared = result.correctKeystrokes >= targetChars;
       return {
         cleared: isPlayerCleared,
-        title: isPlayerCleared ? '🪙 CLEAR (ノルマ達成!)' : '❌ FAILED (獲得目標 未達)',
+        title: isPlayerCleared ? icon('check') + 'CLEAR (ノルマ達成!)' : icon('x') + 'FAILED (獲得目標 未達)',
         desc: isPlayerCleared
           ? `ノルマ達成！ +${result.correctKeystrokes + 20} コインを獲得しました！`
           : `目標ノルマ: ${targetChars}文字(コイン)以上を入力 (今回: ${result.correctKeystrokes}文字)`
@@ -605,8 +598,8 @@ function evaluateClearStatus(result, type) {
       return {
         cleared: isSocialiserCleared,
         title: isSocialiserCleared
-          ? (rival ? `🎖️ CLEAR (${rival.name}を抜きました!)` : '🎖️ CLEAR (現在みんなの中でトップです!)')
-          : '❌ FAILED (ライバルに届かず...)',
+          ? (rival ? `${icon('check')}CLEAR (${rival.name}を抜きました!)` : icon('check') + 'CLEAR (現在みんなの中でトップです!)')
+          : icon('x') + 'FAILED (ライバルに届かず...)',
         desc: isSocialiserCleared
           ? (rival ? `${rival.cpm} CPMの${rival.name}さんを上回る ${result.cpm} CPM を記録しました！` : `記録の中で最速タイでした！ (${result.cpm} CPM)`)
           : `次のライバル「${rival.name}」(${rival.cpm} CPM) まであと ${rival.cpm - result.cpm} CPM (今回: ${result.cpm} CPM)`
@@ -615,24 +608,22 @@ function evaluateClearStatus(result, type) {
     case 'disruptor': {
       const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-      let targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * levelMult);
-      targetScore = risingTarget(targetScore, stats.bestDisruptorScore || 0, 20);
+      const targetScore = timeLimit ? timeLimit * 2 : 150;
       const isDisruptorCleared = score >= targetScore;
       return {
         cleared: isDisruptorCleared,
-        title: isDisruptorCleared ? '⚡ CLEAR (特殊ルール突破!)' : '❌ FAILED (スコア目標未達)',
+        title: isDisruptorCleared ? icon('check') + 'CLEAR (特殊ルール突破!)' : icon('x') + 'FAILED (スコア目標未達)',
         desc: isDisruptorCleared
           ? `ルール「${rule.label}」で ${score} pt を獲得し、クリアしました！`
           : `クリア目標: ${targetScore} pt 以上 (今回: ${score} pt)`
       };
     }
     case 'philanthropist': {
-      let targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
-      targetPhilChars = risingTarget(targetPhilChars, stats.bestSessionChars || 0, 15);
+      const targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
       const isPhilCleared = result.correctKeystrokes >= targetPhilChars;
       return {
         cleared: isPhilCleared,
-        title: isPhilCleared ? '💚 CLEAR (貢献達成!)' : '❌ FAILED (貢献未達)',
+        title: isPhilCleared ? icon('check') + 'CLEAR (貢献達成!)' : icon('x') + 'FAILED (貢献未達)',
         desc: isPhilCleared
           ? `みんなの練習目標に ${result.correctKeystrokes} 文字貢献しました！`
           : `目標: ${targetPhilChars}文字以上の貢献 (今回: ${result.correctKeystrokes}文字)`
@@ -643,7 +634,7 @@ function evaluateClearStatus(result, type) {
       const isFreeCleared = result.sentencesCompleted >= targetSentences;
       return {
         cleared: isFreeCleared,
-        title: isFreeCleared ? '🌟 CLEAR (探求完了!)' : '❌ FAILED (未完了)',
+        title: isFreeCleared ? icon('check') + 'CLEAR (探求完了!)' : icon('x') + 'FAILED (未完了)',
         desc: isFreeCleared
           ? `目標の ${targetSentences} 文以上をやり遂げました！`
           : `目標: ${targetSentences} 文以上タイピングを完了 (今回: ${result.sentencesCompleted}文)`
@@ -1075,7 +1066,7 @@ function buildRediagnosePromptHtml(stats, buttonId) {
   return `
     <div class="setup-row rediagnose-prompt">
       <p class="hint">3回、時間いっぱいプレイしました。今のあなたに合ったタイプか、診断をやり直してみませんか？</p>
-      <button type="button" id="${buttonId}" class="btn btn-tertiary">🔄 タイプ診断をやり直す</button>
+      <button type="button" id="${buttonId}" class="btn btn-tertiary">${icon('refresh')}タイプ診断をやり直す</button>
     </div>
   `;
 }
@@ -1130,7 +1121,7 @@ function renderSetup() {
   if (res && res.scores) {
     chartHtml = `
       <details style="margin-bottom: 1.5rem; background: rgba(0,0,0,0.02); padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd;">
-        <summary style="cursor: pointer; font-weight: bold; color: #333;">📊 自身のタイプ内訳（6要素スコア）を見る</summary>
+        <summary style="cursor: pointer; font-weight: bold; color: #333;">${icon('chart')}自身のタイプ内訳（6要素スコア）を見る</summary>
         <div class="bar-chart" style="margin-top: 10px;">
           ${HEXAD_ORDER.map((t) => {
             const score = Math.max(0, Math.min(100, Math.round(res.scores[t] ?? 0)));
@@ -1181,43 +1172,8 @@ function bindChipGroup(container, name, color, onSelect) {
 }
 
 // 達成者・社交家・変革者で使う「目標レベル」の手動調整UI（自己ベスト更新でさらに上がるのは別途自動）
-function targetLevelSettingHtml(stats, customFieldKey, customUnitLabel) {
-  const unlocked = isCustomTargetUnlocked(stats);
-  const options = Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label }));
-  if (unlocked) options.push({ value: 'custom', label: '🔓 カスタム' });
-  const selected = (stats.targetLevel === 'custom' && !unlocked) ? 'standard' : (stats.targetLevel || 'standard');
-  const isCustom = selected === 'custom';
-  const customValue = stats[customFieldKey] != null ? stats[customFieldKey] : 200;
-  return `
-    <div class="setup-row">
-      <h3>目標レベル</h3>
-      ${chipGroup('targetLevel', options, selected)}
-      ${unlocked
-        ? '<p class="hint">クリア基準を自分で調整できます。自己ベストを更新すると、次の目標はさらに上がります。</p>'
-        : `<p class="hint">🔒 通算${CUSTOM_TARGET_UNLOCK_COUNT}回クリアすると、数値を直接指定できる「カスタム」が解放されます（現在 ${stats.sessionsCompleted || 0}回）。</p>`}
-      <div class="target-custom-input" style="margin-top:10px; ${isCustom ? '' : 'display:none;'}">
-        <label for="target-custom-value" style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">目標値を直接指定（${customUnitLabel}）</label>
-        <input type="number" id="target-custom-value" min="1" step="1" value="${customValue}" style="width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--baseline); background:var(--page); color:var(--text-primary);">
-      </div>
-    </div>
-  `;
-}
-function bindTargetLevel(body, color, customFieldKey) {
-  bindChipGroup(body, 'targetLevel', color, (v) => {
-    appState.setup.targetLevel = v;
-    const s = getStats(); s.targetLevel = v; saveStats(s);
-    const box = body.querySelector('.target-custom-input');
-    if (box) box.style.display = v === 'custom' ? 'block' : 'none';
-  });
-  const input = body.querySelector('#target-custom-value');
-  if (input) {
-    input.addEventListener('change', () => {
-      const val = Math.max(1, Math.round(Number(input.value) || 1));
-      input.value = val;
-      const s = getStats(); s[customFieldKey] = val; saveStats(s);
-    });
-  }
-}
+function targetLevelSettingHtml() { return ''; }
+function bindTargetLevel() {}
 
 function setupAchiever(body, statsBody, stats) {
   body.innerHTML = `
@@ -1233,7 +1189,7 @@ function setupAchiever(body, statsBody, stats) {
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
       ${next ? `<div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (stats.sessionsCompleted / next.count) * 100)}%;background:${HEXAD_TYPES.achiever.color}"></div></div><p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回クリア</p>` : '<p class="hint">全ての称号を獲得済みです！</p>'}
-      <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
+      <p>${icon('flame')}連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
@@ -1292,7 +1248,7 @@ function setupSocialiser(body, statsBody, stats) {
   const rival = findNextRival(stats, -Infinity);
   body.innerHTML = `
     <p class="lead">他の参加者の記録と競い合いましょう。次に打てば、記録の中のすぐ上にいる人を抜けるかもしれません。</p>
-    ${rival ? `<p class="hint">🎯 次のライバル: <strong style="color:${HEXAD_TYPES.socialiser.color};">${escapeHtml(rival.name)}</strong>（${rival.cpm} CPM）</p>` : '<p class="hint">🏆 現在みんなの中でトップです。自己記録の更新を目指しましょう。</p>'}
+    ${rival ? `<p class="hint">${icon('target')}次のライバル: <strong style="color:${HEXAD_TYPES.socialiser.color};">${escapeHtml(rival.name)}</strong>（${rival.cpm} CPM）</p>` : '<p class="hint">' + icon('trophy') + '現在みんなの中でトップです。自己記録の更新を目指しましょう。</p>'}
   `;
 
   statsBody.innerHTML = `
@@ -1350,7 +1306,7 @@ function setupDisruptor(body, statsBody, stats) {
   appState.setup.rule = stats.disruptor.rule;
   if (!stats.disruptor.customWeights) { stats.disruptor.customWeights = { ...DEFAULT_DISRUPTOR_CUSTOM_WEIGHTS }; saveStats(stats); }
   const w = stats.disruptor.customWeights;
-  const ruleOptions = [...Object.entries(DISRUPTOR_RULES).map(([v, r]) => ({ value: v, label: r.label })), { value: 'custom', label: '⚡ カスタムルール（自作）' }];
+  const ruleOptions = [...Object.entries(DISRUPTOR_RULES).map(([v, r]) => ({ value: v, label: r.label })), { value: 'custom', label: 'カスタムルール（自作）' }];
   body.innerHTML = `
     <p class="lead">自分でスコアのルールを書き換えられます。既存のやり方にとらわれず、好きなルールを選ぶか、自分だけの採点式を作りましょう。</p>
     <div class="setup-row">
@@ -1568,16 +1524,16 @@ function renderGame() {
   const freeSpiritColor = appState.setup.avatarColor || HEXAD_TYPES.freeSpirit.color;
   if (game.isBonusSentence) {
     sentenceEl.classList.add('bonus-sentence');
-    $('#game-kanji').innerHTML = `✨ <span style="color:#eda100">${game.sentence.kanji}</span> ✨`;
+    $('#game-kanji').innerHTML = `<span style="color:#eda100">${game.sentence.kanji}</span>`;
   } else if (game.rareTier === 'ultra') {
     sentenceEl.classList.add('rare-sentence-ultra');
-    $('#game-kanji').innerHTML = `🎆🌠 <span style="color:${freeSpiritColor}">${game.sentence.kanji}</span> 🌠🎆`;
+    $('#game-kanji').innerHTML = `<span style="color:${freeSpiritColor}">${game.sentence.kanji}</span>`;
   } else if (game.rareTier === 'super') {
     sentenceEl.classList.add('rare-sentence-super');
-    $('#game-kanji').innerHTML = `💫✨ <span style="color:${freeSpiritColor}">${game.sentence.kanji}</span> ✨💫`;
+    $('#game-kanji').innerHTML = `<span style="color:${freeSpiritColor}">${game.sentence.kanji}</span>`;
   } else if (game.rareTier === 'rare') {
     sentenceEl.classList.add('rare-sentence');
-    $('#game-kanji').innerHTML = `🌟 <span style="color:${freeSpiritColor}">${game.sentence.kanji}</span> 🌟`;
+    $('#game-kanji').innerHTML = `<span style="color:${freeSpiritColor}">${game.sentence.kanji}</span>`;
   } else {
     $('#game-kanji').textContent = game.sentence.kanji;
   }
@@ -1609,7 +1565,7 @@ function maybeShowThanksToast() {
   const el = $('#game-sentence');
   const msg = THANKS_MESSAGES[Math.floor(Math.random() * THANKS_MESSAGES.length)];
   const toast = document.createElement('div');
-  toast.textContent = `💚 ${msg}`;
+  toast.textContent = `${msg}`;
   toast.style.cssText = 'position:absolute;bottom:8px;left:50%;transform:translateX(-50%);' +
     `color:${HEXAD_TYPES.philanthropist.color};font-size:0.82rem;font-weight:600;` +
     'pointer-events:none;animation:floatUp 1.6s ease forwards;white-space:nowrap;';
@@ -1638,7 +1594,7 @@ function triggerSentenceCompleteEffect(isBonus = false) {
   setTimeout(() => el.classList.remove('sentence-complete-flash'), 600);
 
   const pop = document.createElement('div');
-  pop.textContent = isBonus ? '✨ BONUS! +30 ✨' : '+1';
+  pop.textContent = isBonus ? 'BONUS! +30' : '+1';
   pop.style.position = 'absolute';
   pop.style.top = '10px';
   pop.style.right = '20px';
@@ -1737,7 +1693,7 @@ function vizSocialiser() {
   const rankInfo = computeGlobalRank(stats, mine);
   return `
     <p class="hint">${rankInfo ? `記録内での順位: 上位${rankInfo.rank}位 / ${rankInfo.total}件中` : '記録内での順位: まだ記録がありません'}</p>
-    <p style="font-size:1.3rem;">${rival ? `🎯 <strong style="color:${HEXAD_TYPES.socialiser.color};">${escapeHtml(rival.name)}</strong> まであと ${Math.max(0, rival.cpm - mine)} CPM` : '🏆 現在みんなの中でトップです！'}</p>
+    <p style="font-size:1.3rem;">${rival ? `${icon('target')}<strong style="color:${HEXAD_TYPES.socialiser.color};">${escapeHtml(rival.name)}</strong> まであと ${Math.max(0, rival.cpm - mine)} CPM` : '現在みんなの中でトップです！'}</p>
     ${barRow('あなたの速度', (mine / 300) * 100, `${mine} CPM`, HEXAD_TYPES.socialiser.color)}
   `;
 }
@@ -1806,28 +1762,28 @@ function onGameFinished(result, isFullTime) {
     stats.currentStreak = 0;
   }
 
-  // 難易度を手動調整できないタイプ（プレイヤー・自由人・利他主義者）は、
-  // クリアすれば目標が上がり、失敗すれば少し下がる（きつくなりすぎないように）。
-  // 難易度を選べるタイプ（達成者・変革者）は目標レベルで自分で調整できるため、
-  // 従来通り自己ベストに応じて上がり続けるだけにする。
-  // 社交家は自己ベストではなく「記録内の実在のライバル」との比較なので、ここでの状態更新は不要
-  // （目標は常にリーダーボードから動的に算出され、失敗しても難しくなり続けることはない）。
-  if (type === 'player' || type === 'philanthropist') {
-    if (clearStatus.cleared) {
-      stats.bestSessionChars = Math.max(stats.bestSessionChars || 0, result.correctKeystrokes);
-    } else if ((stats.bestSessionChars || 0) > 0) {
-      stats.bestSessionChars = Math.max(0, Math.round(stats.bestSessionChars * 0.85));
-    }
-  } else if (type === 'freeSpirit') {
-    if (clearStatus.cleared) {
-      stats.bestSessionSentences = Math.max(stats.bestSessionSentences || 0, result.sentencesCompleted);
-    } else if ((stats.bestSessionSentences || 0) > 0) {
-      stats.bestSessionSentences = Math.max(0, Math.round(stats.bestSessionSentences * 0.85));
-    }
-  } else if (type === 'disruptor') {
+  // 自己ベストはタイプに関わらず全員分を記録する（ノルマ自体は固定で、自己ベストでは変わらない）。
+  // 極端に短いセッションはCPMが跳ね上がるため記録対象外にする。
+  let disruptorScore = null;
+  if (type === 'disruptor') {
     const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
-    const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-    stats.bestDisruptorScore = Math.max(stats.bestDisruptorScore || 0, score);
+    disruptorScore = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
+  }
+  appState.lastRecord = null;
+  if (result.elapsedSec >= 3) {
+    const prev = { cpm: stats.bestCpm || 0, chars: stats.bestChars || 0, sentences: stats.bestSentences || 0, score: stats.bestDisruptorScore || 0 };
+    stats.bestCpm = Math.max(prev.cpm, result.cpm);
+    stats.bestChars = Math.max(prev.chars, result.correctKeystrokes);
+    stats.bestSentences = Math.max(prev.sentences, result.sentencesCompleted);
+    if (disruptorScore !== null) stats.bestDisruptorScore = Math.max(prev.score, disruptorScore);
+    // 「スコア更新！」を出すのは、記録更新が動機になりやすいタイプのみ（初回は更新扱いにしない）
+    if ((type === 'achiever' || type === 'socialiser') && prev.cpm > 0 && result.cpm > prev.cpm) {
+      appState.lastRecord = { label: 'CPM', value: result.cpm, prev: prev.cpm };
+    } else if (type === 'player' && prev.chars > 0 && result.correctKeystrokes > prev.chars) {
+      appState.lastRecord = { label: '獲得コイン', value: result.correctKeystrokes, prev: prev.chars };
+    } else if (type === 'disruptor' && prev.score > 0 && disruptorScore > prev.score) {
+      appState.lastRecord = { label: 'スコア', value: disruptorScore, prev: prev.score };
+    }
   }
 
   // タイプ診断のやり直し提案: 制限時間いっぱいまでプレイし切ったセッションが3回続いたら
@@ -1874,6 +1830,19 @@ function onGameFinished(result, isFullTime) {
   showScreen('screen-postgame');
 }
 
+function renderRecordInfo(stats) {
+  let el = $('#record-info');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'record-info';
+    const anchor = $('#postgame-stats');
+    anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  }
+  const rec = appState.lastRecord;
+  el.innerHTML = (rec ? `<div class="record-banner">スコア更新！ ${rec.label} ${rec.prev} → <strong>${rec.value}</strong></div>` : '')
+    + `<p class="hint record-best">自己ベスト: ${stats.bestCpm || 0} CPM / ${stats.bestChars || 0} 文字 / ${stats.bestSentences || 0} 文</p>`;
+}
+
 function renderPostgame(result, stats, clearStatus) {
   const type = appState.hexadResult ? appState.hexadResult.primaryType : 'achiever';
 
@@ -1885,6 +1854,8 @@ function renderPostgame(result, stats, clearStatus) {
       <div class="clear-desc">${clearStatus.desc}</div>
     `;
   }
+
+  renderRecordInfo(stats);
 
   $('#postgame-stats').innerHTML = `
     <div class="stat-tile"><div class="stat-value">${result.elapsedSec.toFixed(1)}秒</div><div class="stat-label">タイム</div></div>
@@ -1913,9 +1884,11 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、合計15分（900秒）以上プレイしてから表示する
+  // アンケートへの案内・研究データのエクスポートは、初回プレイ開始から13分以上経過した後のプレイ終了時に表示する（待機時間も含む）
   // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const timeGateMet = stats.totalPlayTimeSec >= 900;
+  const firstLog = getLog()[0];
+  const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
+  const timeGateMet = Date.now() - firstStartMs >= 13 * 60 * 1000;
   const surveyBox = $('#survey-cta-box');
   if (surveyBox) {
     surveyBox.style.display = timeGateMet ? 'block' : 'none';
@@ -1937,7 +1910,7 @@ function postAchiever(result, stats) {
     <p style="font-size:1.3rem;">${stars}</p>
     <p>通算クリア回数: <strong>${stats.sessionsCompleted}</strong> 回 / 現在の称号: <strong>${badge ? badge.name : 'なし'}</strong></p>
     ${next ? `<p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回</p>` : '<p class="hint">全称号を獲得しました！</p>'}
-    <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
+    <p>${icon('flame')}連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
     ${renderPersonalHistoryHtml(stats, result.cpm)}
   `;
 }
@@ -1953,10 +1926,10 @@ function postSocialiser(result, stats) {
   const rival = findNextRival(stats, result.cpm);
   return `
     <h3>みんなとの比較</h3>
-    ${rankInfo ? `<p style="font-size:1.3rem;">🏅 記録内での順位: <strong style="color:${HEXAD_TYPES.socialiser.color};">上位 ${rankInfo.rank}位</strong> / ${rankInfo.total}件中</p>` : ''}
+    ${rankInfo ? `<p style="font-size:1.3rem;">${icon('medal')}記録内での順位: <strong style="color:${HEXAD_TYPES.socialiser.color};">上位 ${rankInfo.rank}位</strong> / ${rankInfo.total}件中</p>` : ''}
     ${rival
-      ? `<p class="hint">🎯 次のライバル: <strong>${escapeHtml(rival.name)}</strong>（${rival.cpm} CPM）まであと ${Math.max(0, rival.cpm - result.cpm)} CPM</p>`
-      : '<p class="hint">🏆 現在みんなの中でトップです！</p>'}
+      ? `<p class="hint">${icon('target')}次のライバル: <strong>${escapeHtml(rival.name)}</strong>（${rival.cpm} CPM）まであと ${Math.max(0, rival.cpm - result.cpm)} CPM</p>`
+      : '<p class="hint">' + icon('trophy') + '現在みんなの中でトップです！</p>'}
     ${renderCommunityLeaderboardHtml(stats, result.cpm)}
   `;
 }

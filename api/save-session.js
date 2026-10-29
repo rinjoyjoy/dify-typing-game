@@ -21,6 +21,12 @@ module.exports = async function handler(req, res) {
       group = null,
     } = req.body || {};
 
+    const str = (v, max, fallback) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : fallback);
+    const num = (v, min, max) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : 0;
+    };
+
     const sql = `
       INSERT INTO typing_sessions
       (nickname, hexad_type, cpm, accuracy, sentences_completed, correct_keystrokes, elapsed_sec, category, difficulty, time_limit_sec, participant_id, participant_group)
@@ -29,24 +35,24 @@ module.exports = async function handler(req, res) {
     `;
 
     const values = [
-      nickname,
-      hexadType,
-      Math.round(cpm),
-      Math.round(accuracy),
-      sentencesCompleted,
-      correctKeystrokes,
-      elapsedSec,
-      category,
-      difficulty,
-      timeLimitSec,
-      participantId,
-      group,
+      str(nickname, 50, 'ゲスト'),
+      str(hexadType, 50, 'achiever'),
+      Math.round(num(cpm, 0, 2000)),
+      Math.round(num(accuracy, 0, 100)),
+      Math.round(num(sentencesCompleted, 0, 10000)),
+      Math.round(num(correctKeystrokes, 0, 100000)),
+      Math.round(num(elapsedSec, 0, 36000) * 100) / 100,
+      str(category, 50, 'random'),
+      str(difficulty, 50, 'random'),
+      timeLimitSec == null ? null : Math.round(num(timeLimitSec, 0, 36000)),
+      str(participantId, 50, null),
+      str(group, 10, null),
     ];
 
     const result = await query(sql, values);
     return res.status(200).json({ success: true, record: result.rows[0] });
   } catch (err) {
     console.error('Error saving session:', err);
-    return res.status(500).json({ error: 'Database save failed', details: err.message });
+    return res.status(500).json({ error: 'Database save failed' });
   }
 };

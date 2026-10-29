@@ -273,7 +273,7 @@ function renderGradeTableHtml(userCpm = null) {
             const isMatch = currentGrade === g.grade;
             return `
               <tr style="${isMatch ? 'background:rgba(42,120,214,0.18); font-weight:bold;' : ''} border-bottom:1px solid #eee;">
-                <td style="padding:6px; color:${g.color};">${g.grade} ${isMatch ? '👈 あなた' : ''}</td>
+                <td style="padding:6px; color:${g.color};">${g.grade} ${isMatch ? 'あなた' : ''}</td>
                 <td style="padding:6px;">${g.min === 0 ? '100未満' : g.min + ' 文字/分〜'}</td>
                 <td style="padding:6px; font-size:0.85rem; color:#555;">${g.desc}</td>
               </tr>
@@ -292,14 +292,14 @@ function renderPersonalHistoryHtml(stats, currentCpm = null) {
   }
   return `
     <div style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
-      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">🏆 あなたの自己ベスト TOP 5</h3>
+      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">${icon('trophy')}あなたの自己ベスト TOP 5</h3>
       <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
         ${top.map((r, idx) => {
           const isCurrent = currentCpm !== null && r.cpm === currentCpm;
           const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '';
           return `
             <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isCurrent ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
-              <span>第${idx + 1}位 ${isCurrent ? '🌟 今回' : ''}</span>
+              <span>第${idx + 1}位 ${isCurrent ? '今回' : ''}</span>
               <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
             </li>
           `;
@@ -361,33 +361,14 @@ function risingTarget(base, best, margin) {
    ============================================================ */
 function evaluateClearStatus(result) {
   const diff = appState.setup.difficulty || 'random';
-  const stats = getStats();
-  const useCustomTarget = stats.targetLevel === 'custom' && isCustomTargetUnlocked(stats);
-  const useChallengeTarget = stats.targetLevel === 'challenge' && isCustomTargetUnlocked(stats);
-
-  let baseCpm = 150;
-  if (diff === 'short') baseCpm = 120;
-  if (diff === 'long') baseCpm = 180;
-
-  let targetCpm;
-  if (useCustomTarget) {
-    // カスタム: 指定した数値がそのまま目標（自己ベストの影響を受けない固定値）
-    targetCpm = Math.max(1, Math.round(Number(stats.customTargetCpm) || baseCpm));
-  } else if (useChallengeTarget) {
-    // チャレンジ: 自己ベストを更新するたびに目標が際限なく上がり続ける
-    const bestCpm = (stats.leaderboard && stats.leaderboard.length) ? Math.max(...stats.leaderboard.map((r) => r.cpm)) : 0;
-    const challengeBase = Math.round(baseCpm * TARGET_LEVELS.extreme.mult);
-    targetCpm = risingTarget(challengeBase, bestCpm, 10);
-  } else {
-    // 初級/標準/上級/超級: 難易度×倍率で決まる固定値（自己ベストの影響を受けない）
-    const levelMult = (TARGET_LEVELS[stats.targetLevel] || TARGET_LEVELS.standard).mult;
-    targetCpm = Math.round(baseCpm * levelMult);
-  }
+  let targetCpm = 120;
+  if (diff === 'short') targetCpm = 100;
+  if (diff === 'long') targetCpm = 150;
 
   const isCleared = result.cpm >= targetCpm && result.accuracy >= 90;
   return {
     cleared: isCleared,
-    title: isCleared ? '🎉 STAGE CLEAR (目標達成!)' : '❌ FAILED (クリアならず...)',
+    title: isCleared ? icon('check') + 'STAGE CLEAR (目標達成!)' : icon('x') + 'FAILED (クリアならず...)',
     desc: isCleared
       ? `目標基準 (${targetCpm} CPM & 正確率90%) を見事クリアしました！`
       : `目標基準: ${targetCpm} CPM & 正確率90% 以上 (今回: ${result.cpm} CPM / 正確率 ${result.accuracy}%)`
@@ -613,44 +594,9 @@ function renderSetup() {
   `;
   renderSessionSettings(body.querySelector('.session-settings'), color);
 
-  const unlocked = isCustomTargetUnlocked(stats);
-  const targetOptions = Object.entries(TARGET_LEVELS).map(([v, l]) => ({ value: v, label: l.label }));
-  if (unlocked) {
-    targetOptions.push({ value: 'custom', label: '🔓 カスタム' });
-    targetOptions.push({ value: 'challenge', label: '🔥 チャレンジ' });
-  }
-  const selectedLevel = ((stats.targetLevel === 'custom' || stats.targetLevel === 'challenge') && !unlocked) ? 'standard' : (stats.targetLevel || 'standard');
-  const isCustom = selectedLevel === 'custom';
-  const customValue = stats.customTargetCpm != null ? stats.customTargetCpm : 200;
-
   body.querySelector('.setup-achiever-body').innerHTML = `
     <p class="lead">目標CPMと正確率90%を目指してスキルを磨きましょう。</p>
-    <div class="setup-row">
-      <h3>目標レベル</h3>
-      ${chipGroup('targetLevel', targetOptions, selectedLevel)}
-      ${unlocked
-        ? '<p class="hint">🔓 カスタム／チャレンジが解放されています。カスタムは指定した数値がそのまま固定の目標に、チャレンジは自己ベストを更新するたびに目標が際限なく上がり続けます。</p>'
-        : `<p class="hint">🔒 通算${CUSTOM_TARGET_UNLOCK_COUNT}回クリアすると、数値を直接指定できる「カスタム」と、自己ベスト更新のたびに目標が際限なく上がる「チャレンジ」が解放されます（現在 ${stats.sessionsCompleted || 0}回）。</p>`}
-      <div class="target-custom-input" style="margin-top:10px; ${isCustom ? '' : 'display:none;'}">
-        <label for="target-custom-value" style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;">目標値を直接指定（CPM）</label>
-        <input type="number" id="target-custom-value" min="1" step="1" value="${customValue}" style="width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--baseline); background:var(--page); color:var(--text-primary);">
-      </div>
-    </div>
   `;
-  bindChipGroup(body, 'targetLevel', color, (v) => {
-    appState.setup.targetLevel = v;
-    const s = getStats(); s.targetLevel = v; saveStats(s);
-    const box = body.querySelector('.target-custom-input');
-    if (box) box.style.display = v === 'custom' ? 'block' : 'none';
-  });
-  const customInput = body.querySelector('#target-custom-value');
-  if (customInput) {
-    customInput.addEventListener('change', () => {
-      const val = Math.max(1, Math.round(Number(customInput.value) || 1));
-      customInput.value = val;
-      const s = getStats(); s.customTargetCpm = val; saveStats(s);
-    });
-  }
 
   // Achiever固定コンテンツ（ランキング・指標等）
   const badge = ACHIEVER_BADGES.filter((b) => stats.sessionsCompleted >= b.count).pop();
@@ -660,7 +606,7 @@ function renderSetup() {
       <h3>現在の称号</h3>
       <p>${badge ? `<strong>${badge.name}</strong>` : 'まだ称号がありません（1回クリアで最初の称号）'}</p>
       ${next ? `<div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (stats.sessionsCompleted / next.count) * 100)}%;background:${color}"></div></div><p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回クリア</p>` : '<p class="hint">全ての称号を獲得済みです！</p>'}
-      <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
+      <p>${icon('flame')}連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
       ${renderPersonalHistoryHtml(stats)}
       ${renderGradeTableHtml()}
     </div>
@@ -936,6 +882,16 @@ function onGameFinished(result) {
     stats.currentStreak = 0;
   }
 
+  // 自己ベストを記録し、更新時は「スコア更新！」を出す（初回は更新扱いにしない）
+  appState.lastRecord = null;
+  if (result.elapsedSec >= 3) {
+    const prevCpm = stats.bestCpm || 0;
+    stats.bestCpm = Math.max(prevCpm, result.cpm);
+    stats.bestChars = Math.max(stats.bestChars || 0, result.correctKeystrokes);
+    stats.bestSentences = Math.max(stats.bestSentences || 0, result.sentencesCompleted);
+    if (prevCpm > 0 && result.cpm > prevCpm) appState.lastRecord = { label: 'CPM', value: result.cpm, prev: prevCpm };
+  }
+
   stats.sessionsCompleted++;
   stats.totalCorrectChars += result.correctKeystrokes;
   stats.totalPlayTimeSec += result.elapsedSec;
@@ -977,6 +933,19 @@ function onGameFinished(result) {
   showScreen('screen-postgame');
 }
 
+function renderRecordInfo(stats) {
+  let el = $('#record-info');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'record-info';
+    const anchor = $('#postgame-stats');
+    anchor.parentNode.insertBefore(el, anchor.nextSibling);
+  }
+  const rec = appState.lastRecord;
+  el.innerHTML = (rec ? `<div class="record-banner">スコア更新！ ${rec.label} ${rec.prev} → <strong>${rec.value}</strong></div>` : '')
+    + `<p class="hint record-best">自己ベスト: ${stats.bestCpm || 0} CPM / ${stats.bestChars || 0} 文字 / ${stats.bestSentences || 0} 文</p>`;
+}
+
 function renderPostgame(result, stats, clearStatus) {
   const bannerEl = $('#clear-status-banner');
   if (bannerEl) {
@@ -986,6 +955,8 @@ function renderPostgame(result, stats, clearStatus) {
       <div class="clear-desc">${clearStatus.desc}</div>
     `;
   }
+
+  renderRecordInfo(stats);
 
   $('#postgame-stats').innerHTML = `
     <div class="stat-tile"><div class="stat-value">${result.elapsedSec.toFixed(1)}秒</div><div class="stat-label">タイム</div></div>
@@ -1002,7 +973,7 @@ function renderPostgame(result, stats, clearStatus) {
     <p style="font-size:1.3rem;">${stars}</p>
     <p>通算クリア回数: <strong>${stats.sessionsCompleted}</strong> 回 / 現在の称号: <strong>${badge ? badge.name : 'なし'}</strong></p>
     ${next ? `<p class="hint">次の称号「${next.name}」まであと ${next.count - stats.sessionsCompleted} 回</p>` : '<p class="hint">全称号を獲得しました！</p>'}
-    <p>🔥 連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
+    <p>${icon('flame')}連続クリア: <strong>${stats.currentStreak || 0}</strong>回（自己最高 ${stats.bestStreak || 0}回）</p>
     ${renderPersonalHistoryHtml(stats, result.cpm)}
   `;
 
@@ -1012,11 +983,12 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、保存済みログの合計プレイ時間が
-  // 15分（900秒）以上になってから表示する（「記録を削除」でログを消せばゲートも連動してリセットされる）
+  // アンケートへの案内・研究データのエクスポートは、初回プレイ開始（保存済みログ先頭）から
+  // 13分以上経過した後のプレイ終了時に表示する（プレイしていない時間も含む）（「記録を削除」でログを消せばゲートも連動してリセットされる）
   // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const loggedPlayTimeSec = getLog().reduce((sum, r) => sum + (Number(r.elapsedSec) || 0), 0);
-  const timeGateMet = loggedPlayTimeSec >= 900;
+  const firstLog = getLog()[0];
+  const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
+  const timeGateMet = Date.now() - firstStartMs >= 13 * 60 * 1000;
   const surveyBox = $('#survey-cta-box');
   if (surveyBox) {
     surveyBox.style.display = timeGateMet ? 'block' : 'none';
