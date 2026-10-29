@@ -686,8 +686,8 @@ const YOUON_KANA = {
   'きゃ': ['kya'], 'きゅ': ['kyu'], 'きょ': ['kyo'],
   'ぎゃ': ['gya'], 'ぎゅ': ['gyu'], 'ぎょ': ['gyo'],
   'しゃ': ['sha', 'sya'], 'しゅ': ['shu', 'syu'], 'しょ': ['sho', 'syo'],
-  'じゃ': ['ja', 'zya'], 'じゅ': ['ju', 'zyu'], 'じょ': ['jo', 'zyo'],
-  'ちゃ': ['cha', 'tya'], 'ちゅ': ['chu', 'tyu'], 'ちょ': ['cho', 'tyo'],
+  'じゃ': ['ja', 'zya', 'jya'], 'じゅ': ['ju', 'zyu', 'jyu'], 'じょ': ['jo', 'zyo', 'jyo'],
+  'ちゃ': ['cha', 'tya', 'cya'], 'ちゅ': ['chu', 'tyu', 'cyu'], 'ちょ': ['cho', 'tyo', 'cyo'],
   'にゃ': ['nya'], 'にゅ': ['nyu'], 'にょ': ['nyo'],
   'ひゃ': ['hya'], 'ひゅ': ['hyu'], 'ひょ': ['hyo'],
   'びゃ': ['bya'], 'びゅ': ['byu'], 'びょ': ['byo'],
@@ -698,7 +698,7 @@ const YOUON_KANA = {
   'てぃ': ['thi'], 'でぃ': ['dhi'], 'とぅ': ['twu'], 'どぅ': ['dwu'],
   'ふぁ': ['fa'], 'ふぃ': ['fi'], 'ふぇ': ['fe'], 'ふぉ': ['fo'], 'ふゅ': ['fyu'],
   'うぃ': ['wi'], 'うぇ': ['we'], 'うぉ': ['who', 'wo'],
-  'しぇ': ['she'], 'じぇ': ['je'], 'ちぇ': ['che'],
+  'しぇ': ['she', 'sye'], 'じぇ': ['je', 'zye', 'jye'], 'ちぇ': ['che', 'tye', 'cye'],
   'つぁ': ['tsa'], 'つぃ': ['tsi'], 'つぇ': ['tse'], 'つぉ': ['tso'],
   'くぁ': ['qwa', 'kwa'], 'くぃ': ['qwi', 'kwi'], 'くぇ': ['qwe', 'kwe'], 'くぉ': ['qwo', 'kwo'],
   'ぐぁ': ['gwa'],
@@ -735,6 +735,10 @@ function buildMoraList(reading) {
       delete moras[i].sokuon;
     }
   }
+  // 文末の「ん」は "n" を1回打った時点で文が完了し、2打目の "n" が次の文への誤入力になってしまう。
+  // 後ろに続く文字が無いため、"nn"（または "xn"）の入力を必須にする。
+  const lastMora = moras[moras.length - 1];
+  if (lastMora && lastMora.kana === 'ん') lastMora.options = ['nn', 'xn'];
   return moras;
 }
 
