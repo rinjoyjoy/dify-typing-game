@@ -302,8 +302,8 @@ function getGrade(cpm) {
 function renderGradeTableHtml(userCpm = null) {
   const currentGrade = userCpm !== null ? getGrade(userCpm).grade : null;
   return `
-    <div class="grade-table-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
-      <h3 style="margin-top:0; font-size:1.1rem; color:#333;">タイピング速度 評価基準表</h3>
+    <div class="grade-table-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid var(--baseline);">
+      <h3 style="margin-top:0; font-size:1.1rem; color:var(--text-primary);">タイピング速度 評価基準表</h3>
       <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.95rem;">
         <thead>
           <tr style="border-bottom:2px solid #ccc;">
@@ -319,7 +319,7 @@ function renderGradeTableHtml(userCpm = null) {
               <tr style="${isMatch ? 'background:rgba(42,120,214,0.18); font-weight:bold;' : ''} border-bottom:1px solid #eee;">
                 <td style="padding:6px; color:${g.color};">${g.grade} ${isMatch ? 'あなた' : ''}</td>
                 <td style="padding:6px;">${g.min === 0 ? '100未満' : g.min + ' 文字/分〜'}</td>
-                <td style="padding:6px; font-size:0.85rem; color:#555;">${g.desc}</td>
+                <td style="padding:6px; font-size:0.85rem; color:var(--text-secondary);">${g.desc}</td>
               </tr>
             `;
           }).join('')}
@@ -335,8 +335,8 @@ function renderPersonalHistoryHtml(stats, currentCpm = null) {
     return `<div class="personal-history-box" style="margin-top:12px;"><p class="hint">まだ個人の記録がありません。プレイして自己ベストを更新しましょう！</p></div>`;
   }
   return `
-    <div class="personal-history-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
-      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">${icon('trophy')}あなたの自己ベスト TOP 5（個人記録）</h3>
+    <div class="personal-history-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid var(--baseline);">
+      <h3 style="margin-top:0; font-size:1.05rem; color:var(--text-primary);">${icon('trophy')}あなたの自己ベスト TOP 5（個人記録）</h3>
       <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
         ${top.map((r, idx) => {
           const isCurrent = currentCpm !== null && r.cpm === currentCpm;
@@ -344,7 +344,7 @@ function renderPersonalHistoryHtml(stats, currentCpm = null) {
           return `
             <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isCurrent ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
               <span>第${idx + 1}位 ${isCurrent ? '今回' : ''}</span>
-              <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
+              <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:var(--text-muted);">${dateStr}</small></span>
             </li>
           `;
         }).join('')}
@@ -496,8 +496,8 @@ function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
   }
   const top = board.slice(0, 5);
   return `
-    <div class="community-board-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid #ddd;">
-      <h3 style="margin-top:0; font-size:1.05rem; color:#333;">${icon('globe')}みんなの記録 TOP 5</h3>
+    <div class="community-board-box" style="margin-top:12px; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px; border:1px solid var(--baseline);">
+      <h3 style="margin-top:0; font-size:1.05rem; color:var(--text-primary);">${icon('globe')}みんなの記録 TOP 5</h3>
       <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
         ${top.map((r, idx) => {
           const isMe = r.name === appState.nickname && currentCpm !== null && r.cpm === currentCpm;
@@ -505,7 +505,7 @@ function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
           return `
             <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isMe ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
               <span>第${idx + 1}位 ${isMe ? '今回' : ''} ${r.name === appState.nickname ? '（あなた）' : escapeHtml(r.name)}</span>
-              <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:#888;">${dateStr}</small></span>
+              <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:var(--text-muted);">${dateStr}</small></span>
             </li>
           `;
         }).join('')}
@@ -1413,8 +1413,8 @@ function renderSetup() {
   let chartHtml = '';
   if (res && res.scores) {
     chartHtml = `
-      <details style="margin-bottom: 1.5rem; background: rgba(0,0,0,0.02); padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd;">
-        <summary style="cursor: pointer; font-weight: bold; color: #333;">${icon('chart')}自身のタイプ内訳（6要素スコア）を見る</summary>
+      <details style="margin-bottom: 1.5rem; background: rgba(0,0,0,0.02); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--baseline);">
+        <summary style="cursor: pointer; font-weight: bold; color:var(--text-primary);">${icon('chart')}自身のタイプ内訳（6要素スコア）を見る</summary>
         <div class="bar-chart" style="margin-top: 10px;">
           ${HEXAD_ORDER.map((t) => {
             const score = Math.max(0, Math.min(100, Math.round(res.scores[t] ?? 0)));
