@@ -1,7 +1,12 @@
 const { Pool } = require('pg');
 
+// pg v9 から sslmode=require/prefer/verify-ca の意味が変わる（現在は verify-full 相当）。
+// 現在の挙動（証明書を検証する）をそのまま明示して、警告を出さないようにする。
+const connectionString = (process.env.POSTGRES_URL || process.env.DATABASE_URL || '')
+  .replace(/sslmode=(require|prefer|verify-ca)/, 'sslmode=verify-full');
+
 const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
+  connectionString,
   ssl: {
     rejectUnauthorized: false
   }
