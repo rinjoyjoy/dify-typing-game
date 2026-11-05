@@ -990,11 +990,11 @@ function renderPostgame(result, stats, clearStatus) {
   }
 
   // アンケートへの案内・研究データのエクスポートは、初回プレイ開始（保存済みログ先頭）から
-  // 13分以上経過した後のプレイ終了時に表示する（プレイしていない時間も含む）（「記録を削除」でログを消せばゲートも連動してリセットされる）
+  // 10分以上経過した後のプレイ終了時に表示する（プレイしていない時間も含む）（「記録を削除」でログを消せばゲートも連動してリセットされる）
   // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
   const firstLog = getLog()[0];
   const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
-  const timeGateMet = Date.now() - firstStartMs >= 13 * 60 * 1000;
+  const timeGateMet = Date.now() - firstStartMs >= 10 * 60 * 1000;
   const surveyBox = $('#survey-cta-box');
   if (surveyBox) {
     surveyBox.style.display = timeGateMet ? 'block' : 'none';
