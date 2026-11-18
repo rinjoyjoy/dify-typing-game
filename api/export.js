@@ -109,7 +109,7 @@ async function summaryRows() {
     const hr = p.hexadResult || null;
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
-    row.classify_method = p.classifyMethod || (hr && hr.method) || null;
+    row.classify_method = (hr && hr.method) || p.classifyMethod || null; // llm_items＝AIが12項目を推定（3回平均）、survey＝Hexad-12に回答
     row.hex_source = p.hexSource || 'post_survey'; // onboarding＝アンケート群が最初の診断で答えたHexad-12（診断と基準が同じ回答）
     HEXAD_ORDER.forEach((t) => { row[`assigned_score_${t}`] = hr && hr.scores ? hr.scores[t] ?? '' : ''; });
     const hexComplete = HEXAD_ORDER.every((t) => typeof hexMeans[t] === 'number');
@@ -121,9 +121,21 @@ async function summaryRows() {
         row.assigned_rank_in_hex = r[HEXAD_ORDER.indexOf(assigned)];
         row.assigned_is_top = hexMeans[assigned] === top ? 1 : 0;
       }
+      if (assigned) {
+        row.assigned_in_top2 = row.assigned_rank_in_hex <= 2 ? 1 : 0;
+      }
       if (hr && hr.scores && HEXAD_ORDER.every((t) => Number.isFinite(Number(hr.scores[t])))) {
         row.spearman_assigned_vs_hex = spearman(HEXAD_ORDER.map((t) => Number(hr.scores[t])), HEXAD_ORDER.map((t) => hexMeans[t]));
       }
+    }
+    // AI対話群：AIが推定したHexad-12の各項目の点数（3回の平均）と、本人の回答との平均絶対誤差
+    const aiItems = hr && hr.itemRatings ? hr.itemRatings : null;
+    hexItems.forEach((it) => { row[`ai_${it.id}`] = aiItems ? aiItems[it.id] ?? '' : ''; });
+    row.ai_runs = hr && hr.runs ? hr.runs : '';
+    if (aiItems && hexItems.every((it) => typeof a[it.id] === 'number' && Number.isFinite(Number(aiItems[it.id])))) {
+      row.ai_item_mae = mean(hexItems.map((it) => Math.abs(Number(aiItems[it.id]) - a[it.id])));
+    } else {
+      row.ai_item_mae = '';
     }
 
     // 時刻と所要時間
