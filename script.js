@@ -2097,6 +2097,8 @@ function onGameFinished(result, isFullTime) {
   // 設定画面で提案する（途中で切り上げたセッションはカウントしない）
   if (isFullTime) {
     stats.fullTimeStreak = (stats.fullTimeStreak || 0) + 1;
+  } else {
+    stats.fullTimeStreak = 0; // 途中で切り上げたら連続が途切れる
   }
 
   stats.sessionsCompleted++;

@@ -458,7 +458,22 @@
     }
   })();
 
+  // 別の参加者番号が入力されたら、同じブラウザに残っている前の人の記録（プレイ記録・診断結果・
+  // 時刻・アンケートの下書きなど）を消す。未送信のアンケート（pending）は前の人のデータなので残し、送信を再試行させる。
+  const KEEP_ON_RESET = ['gtp_model', KEYS.pending];
+  function resetForNewParticipant() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('gtp_') && !KEEP_ON_RESET.includes(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch (e) {}
+    draft = { page: 0, answers: {} };
+    surveyOpen = false;
+    lastPhase = null;
+  }
+
   window.StudyFlow = {
+    resetForNewParticipant,
     REQUIRED_PLAY_MS, MAX_PLAY_MS,
     mark, bump, getEvents, playState,
     updatePostgame, openSurvey,

@@ -401,6 +401,11 @@
 
         const group = groupForParticipant(n);
         const cfg = GROUP_CONFIG[group];
+        // 前回この端末で別の番号が使われていたら、その人の記録を消してから始める
+        //（同じ番号での再読み込みなら、続きから再開できるように記録を残す）
+        let prevPid = null;
+        try { prevPid = (JSON.parse(localStorage.getItem('gtp_participant_meta') || 'null') || {}).pid || null; } catch (e) {}
+        if (prevPid !== String(n) && window.StudyFlow) StudyFlow.resetForNewParticipant();
         try {
           localStorage.setItem('gtp_participant_meta', JSON.stringify({ pid: String(n), group }));
         } catch (e) {}
