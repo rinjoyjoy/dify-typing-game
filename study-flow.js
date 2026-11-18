@@ -482,6 +482,26 @@
     save(KEYS.entryId, id);
     return id;
   }
+  // この端末に残っている前回の参加（番号入力画面で「続きから再開」を出すかどうかの判断に使う）
+  function previousEntry() {
+    const meta = load(KEYS.participant, null);
+    const id = load(KEYS.entryId, null);
+    if (!meta || !meta.pid || !id) return null;
+    return { pid: String(meta.pid), entryId: id, submitted: !!load(KEYS.submitted, null) };
+  }
+  // 「続きから再開」を選んだ：同じ参加IDのまま続ける（再開した回数と時刻を記録）
+  function markResume() {
+    bump('n_resumes');
+    mark('lastResume', { overwrite: true });
+  }
+  // 再開後、前回いた段階に戻す：アンケートの途中ならアンケートへ、診断が済んでいれば練習の準備画面へ
+  function resumeView() {
+    const ev = getEvents();
+    if (ev.surveyStart && !load(KEYS.submitted, null)) { openSurvey(); return; }
+    const resumeBtn = document.getElementById('btn-resume-session');
+    if (resumeBtn && resumeBtn.style.display !== 'none') resumeBtn.click();
+  }
+
   function entryId() {
     let id = load(KEYS.entryId, null);
     if (!id) { id = newId(); save(KEYS.entryId, id); }
@@ -489,7 +509,7 @@
   }
 
   window.StudyFlow = {
-    resetForNewParticipant, entryId,
+    resetForNewParticipant, entryId, previousEntry, markResume, resumeView,
     REQUIRED_PLAY_MS, MAX_PLAY_MS,
     mark, bump, getEvents, playState,
     updatePostgame, openSurvey,

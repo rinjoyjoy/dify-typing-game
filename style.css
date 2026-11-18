@@ -644,3 +644,6 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 .ps-nav { justify-content: space-between; }
 .ps-debrief { text-align: left; margin-top: 20px; padding: 14px 16px; border-radius: 6px; background: var(--page); font-size: 0.9rem; }
 .ps-debrief h3 { margin-top: 0; }
+
+.resume-choice { margin-top: 18px; padding: 14px 16px; border-radius: 6px; border: 1.5px dashed var(--baseline); line-height: 1.6; }
+.resume-choice p { margin: 0 0 8px; }

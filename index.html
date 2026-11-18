@@ -42,6 +42,14 @@
         <div class="button-row">
           <button id="btn-enter" class="btn btn-primary">はじめる</button>
         </div>
+        <div id="resume-choice" class="resume-choice" style="display:none;">
+          <p id="resume-message"></p>
+          <div class="button-row">
+            <button id="btn-resume-yes" class="btn btn-primary">前回の続きから再開する</button>
+            <button id="btn-resume-no" class="btn btn-secondary">最初からやり直す</button>
+          </div>
+          <p class="hint" id="resume-hint">「最初からやり直す」を選ぶと、前回の記録はそのまま残し、新しい参加として記録します。</p>
+        </div>
       </div>
     </section>
   </div>
@@ -401,9 +409,46 @@
 
         const group = groupForParticipant(n);
         const cfg = GROUP_CONFIG[group];
-        // 番号を入力するたびに（同じ番号でも）、この端末に残っている前の記録を消し、新しい参加IDで始める。
-        // DBには参加IDごとに別々に保存されるので、同じ番号を2回使っても上書きされない。
-        if (window.StudyFlow) StudyFlow.resetForNewParticipant();
+        // この端末に同じ番号の参加の記録が残っていたら、「続きから再開」か「最初からやり直す」かを選んでもらう。
+        // どちらを選んでも前回の記録は上書きされない（やり直す場合は新しい参加IDで別に記録する）。
+        const prev = window.StudyFlow ? StudyFlow.previousEntry() : null;
+        if (prev && prev.pid === String(n)) {
+          showResumeChoice(n, group, prev);
+          return;
+        }
+        startStudy(n, group, false);
+      }
+
+      function showResumeChoice(n, group, prev) {
+        qs('#btn-enter').style.display = 'none';
+        qs('#pid-input').disabled = true;
+        const box = qs('#resume-choice');
+        const yes = qs('#btn-resume-yes');
+        const no = qs('#btn-resume-no');
+        if (prev.submitted) {
+          qs('#resume-message').innerHTML = 'この端末では、参加者番号 <strong>' + n + '</strong> のアンケートはすでに送信済みです。番号に間違いがないか確認してください。';
+          yes.style.display = 'none';
+          no.textContent = '新しい参加として最初から始める';
+          no.className = 'btn btn-primary';
+        } else {
+          qs('#resume-message').innerHTML = 'この端末に、参加者番号 <strong>' + n + '</strong> で途中まで参加した記録が残っています。';
+        }
+        box.style.display = 'block';
+        yes.onclick = () => startStudy(n, group, true);
+        no.onclick = () => startStudy(n, group, false);
+      }
+
+      function startStudy(n, group, resume) {
+        const btn = qs('#btn-enter');
+        const cfg = GROUP_CONFIG[group];
+        if (window.StudyFlow) {
+          if (resume) {
+            StudyFlow.markResume();
+          } else {
+            // 新しい参加：この端末に残っている前の記録を消し、新しい参加IDで始める（DB上の前回の記録は残る）
+            StudyFlow.resetForNewParticipant();
+          }
+        }
         try {
           localStorage.setItem('gtp_participant_meta', JSON.stringify({ pid: String(n), group }));
         } catch (e) {}
@@ -428,6 +473,8 @@
           const s = document.createElement('script');
           s.src = cfg.script;
           s.onload = () => {
+            // 「続きから再開」なら、前回いた段階（アンケート中・練習の準備）から始める
+            if (resume && window.StudyFlow) StudyFlow.resumeView();
             overlay.classList.add('leaving');
             setTimeout(() => overlay.remove(), 220);
           };

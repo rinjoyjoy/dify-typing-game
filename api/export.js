@@ -11,7 +11,7 @@ const PostSurvey = require('../post-survey-items.js');
 
 const HEXAD_ORDER = ['achiever', 'player', 'socialiser', 'freeSpirit', 'philanthropist', 'disruptor'];
 const EVENT_COLS = ['entry', 'onboardingStart', 'onboardingEnd', 'firstGameStart', 'freeChoiceShown', 'surveyStart', 'surveySubmit'];
-const COUNT_COLS = ['n_games_started', 'n_free_continue', 'n_clear', 'n_fail', 'n_rediagnose_clicked'];
+const COUNT_COLS = ['n_games_started', 'n_free_continue', 'n_clear', 'n_fail', 'n_rediagnose_clicked', 'n_resumes'];
 
 function safeEqual(a, b) {
   const ba = Buffer.from(String(a));
