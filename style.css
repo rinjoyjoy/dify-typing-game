@@ -653,19 +653,19 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 /* 番号入力画面：全体の流れ（3ステップ）
    配色はタイプの色（青・緑など）を使わず、文字色ベースの落ち着いた色にする（参加者の診断結果の色と混同しないように） */
 .study-time ol.flow { list-style: none; margin: 6px 0 12px; padding: 0; display: grid; grid-template-columns: 1fr 22px 1fr 22px 1fr; align-items: stretch; gap: 2px; }
-.study-time ol.flow li.flow-step { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; text-align: center; gap: 6px; padding: 16px 12px 14px; border: 1px solid var(--gridline); border-radius: 10px; background: var(--surface-1); }
+.study-time ol.flow li.flow-step { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; text-align: center; gap: 6px; padding: 16px 8px 14px; border: 1.5px solid var(--baseline); border-radius: 10px; background: var(--surface-1); }
 .flow-head { display: flex; align-items: center; gap: 8px; }
 .flow-num { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--text-primary); color: var(--surface-1); font-weight: 700; font-size: 0.8rem; line-height: 1; }
-.flow-icon { width: 24px; height: 24px; fill: none; stroke: var(--text-secondary); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.flow-icon { width: 24px; height: 24px; fill: none; stroke: var(--text-primary); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .flow-step p { margin: 0; }
 .flow-title { font-weight: 700; font-size: 1rem; letter-spacing: 0.02em; }
-.flow-time { display: inline-block; padding: 1px 10px; border-radius: 999px; background: color-mix(in srgb, var(--text-primary) 7%, transparent); color: var(--text-secondary); font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; font-size: 0.78rem; }
-.flow-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6; margin-top: 2px !important; text-wrap: balance; }
+.flow-time { display: inline-block; padding: 1px 10px; border-radius: 999px; background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-primary); font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; font-size: 0.78rem; }
+.flow-desc { font-size: 0.8rem; color: var(--text-primary); line-height: 1.6; margin-top: 2px !important; text-wrap: balance; }
 /* 1文ごとに行を分け（.sent）、文節（.ph）の途中では改行しない */
 .flow-desc .sent { display: block; text-wrap: balance; }
 .flow-desc .ph { display: inline-block; }
 .flow-arrow { display: flex; align-items: center; justify-content: center; }
-.flow-arrow svg { width: 18px; height: 18px; fill: none; stroke: var(--baseline); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.flow-arrow svg { width: 18px; height: 18px; fill: none; stroke: var(--text-muted); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 560px) {
   .study-time ol.flow { grid-template-columns: 1fr; gap: 0; }
   .flow-arrow { height: 20px; }
