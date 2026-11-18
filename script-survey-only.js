@@ -561,13 +561,16 @@ function evaluateClearStatus(result, type) {
   let targetCpm = 120;
   if (diff === 'short') targetCpm = 100;
   if (diff === 'long') targetCpm = 150;
+  const ease = StudyFlow.easeFactor(); // 連続で失敗したらクリア目標を下げる（難易度の下限）
+  targetCpm = Math.round(targetCpm * ease);
 
   let targetChars = 100;
   if (timeLimit) {
     targetChars = Math.floor(timeLimit * 1.5);
   }
+  targetChars = Math.round(targetChars * ease);
 
-  const targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
+  const targetSentences = Math.max(1, Math.round((timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3) * ease));
 
   switch (type) {
     case 'achiever': {
@@ -608,7 +611,7 @@ function evaluateClearStatus(result, type) {
     case 'disruptor': {
       const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-      const targetScore = timeLimit ? timeLimit * 2 : 150;
+      const targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * ease);
       const isDisruptorCleared = score >= targetScore;
       return {
         cleared: isDisruptorCleared,
@@ -619,7 +622,7 @@ function evaluateClearStatus(result, type) {
       };
     }
     case 'philanthropist': {
-      const targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
+      const targetPhilChars = Math.round((timeLimit ? Math.floor(timeLimit * 1.0) : 80) * ease);
       const isPhilCleared = result.correctKeystrokes >= targetPhilChars;
       return {
         cleared: isPhilCleared,
@@ -757,7 +760,6 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
    参加者番号 / 群の取得（?pid=&group= で渡される想定）
    ============================================================ */
 const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
-const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
 const DEFAULT_GROUP = 'B'; // このページ(index-survey-only.html)はB群（アンケート診断）固定
 
 function initParticipantInfo() {
@@ -917,33 +919,42 @@ function initWelcomeScreen() {
 }
 
 /* ============================================================
-   1. アンケート画面（12問・5段階評価）
+   1. アンケート画面（Hexad-12・12問・7段階評価）
+   本実験では、アンケート群の診断に正規の尺度（Hexad-12の日本語訳）を使う。
+   設問文は事後アンケートと共通（post-survey-items.js）。ここでの回答は、事後アンケートの
+   Hexad-12の回答としてそのまま使うため、アンケート群は事後アンケートで同じ質問に答えない。
    ============================================================ */
+
+const ONBOARD_ITEMS = PostSurveyItems.ALL_ITEMS
+  .filter((it) => it.scale === 'HEX')
+  .map((it) => ({ id: it.id, type: it.hexadType, text: it.text }));
 
 function renderSurveyForm() {
   const formEl = $('#survey-form');
   appState.answers = {};
+  const ends = PostSurveyItems.LIKERT7_ENDS;
 
-  formEl.innerHTML = SURVEY_ITEMS.map((item) => `
+  formEl.innerHTML = ONBOARD_ITEMS.map((item, idx) => `
     <div class="survey-item" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid #e0e0e0;">
       <p style="margin: 0 0 0.75rem; font-weight: 500; line-height: 1.5;">
-        <span style="color: var(--theme-color, #2a78d6); font-weight: 700; margin-right: 0.5rem;">Q${item.id}.</span>${escapeHtml(item.text)}
+        <span style="color: var(--theme-color, #2a78d6); font-weight: 700; margin-right: 0.5rem;">Q${idx + 1}.</span>${escapeHtml(item.text)}
       </p>
-      <div class="likert-group" data-qid="${item.id}" style="display: flex; gap: 6px; flex-wrap: wrap;">
-        ${LIKERT_LABELS.map((lbl, i) => `
+      <div class="likert-group" data-qid="${item.id}" style="display: flex; gap: 6px;">
+        ${[1, 2, 3, 4, 5, 6, 7].map((n) => `
           <button type="button"
             class="likert-btn"
-            data-value="${i + 1}"
-            style="flex: 1; min-width: 60px; padding: 8px 4px; border: 2px solid var(--baseline); border-radius: 6px; background: var(--surface-1); cursor: pointer; font-size: 0.75rem; line-height: 1.3; white-space: pre-line; transition: all 0.15s;"
-          >${lbl}</button>
+            data-value="${n}"
+            style="flex: 1; min-width: 0; padding: 10px 0; border: 2px solid var(--baseline); border-radius: 6px; background: var(--surface-1); cursor: pointer; font-size: 0.9rem; transition: all 0.15s;"
+          >${n}</button>
         `).join('')}
       </div>
+      <div class="likert7-ends"><span>1＝${escapeHtml(ends[0])}</span><span>7＝${escapeHtml(ends[1])}</span></div>
     </div>
   `).join('');
 
   // リッカートボタンのイベント
   formEl.querySelectorAll('.likert-group').forEach((group) => {
-    const qid = Number(group.dataset.qid);
+    const qid = group.dataset.qid;
     group.querySelectorAll('.likert-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         group.querySelectorAll('.likert-btn').forEach((b) => {
@@ -965,7 +976,7 @@ function renderSurveyForm() {
 function checkSurveyComplete() {
   const answered = Object.keys(appState.answers).length;
   const submitBtn = $('#btn-survey-submit');
-  if (answered >= SURVEY_ITEMS.length) {
+  if (answered >= ONBOARD_ITEMS.length) {
     submitBtn.disabled = false;
     submitBtn.style.opacity = '1';
   } else {
@@ -985,43 +996,35 @@ $('#btn-survey-submit').addEventListener('click', () => {
   }, 800);
 });
 
-/* スコアベース判定（ルールベース） */
+/* スコアベース判定（ルールベース）
+   Hexad-12：タイプごとに2項目の平均（1〜7）を求め、0〜100に換算する。
+   最高得点が同点のときは、特定のタイプに偏らないよう、同点のタイプからランダムに1つ選ぶ。 */
 function classifyByScore(answers) {
-  const scores = {};
-  for (const type of HEXAD_ORDER) {
-    scores[type] = 0;
-  }
-
-  for (const item of SURVEY_ITEMS) {
-    const val = answers[item.id] || 3;
-    // 1〜5点をそのまま0〜100点にスケール
-    scores[item.type] += val;
-  }
-
-  // タイプごとの設問数で平均化し、0〜100に正規化
+  const sums = {};
   const counts = {};
-  for (const type of HEXAD_ORDER) counts[type] = 0;
-  for (const item of SURVEY_ITEMS) counts[item.type]++;
+  for (const type of HEXAD_ORDER) { sums[type] = 0; counts[type] = 0; }
+  for (const item of ONBOARD_ITEMS) {
+    const val = Number(answers[item.id]) || 4;
+    sums[item.type] += val;
+    counts[item.type]++;
+  }
 
+  const means = {};
   const normalized = {};
   for (const type of HEXAD_ORDER) {
-    const avg = scores[type] / counts[type]; // 1〜5
-    normalized[type] = Math.round((avg - 1) / 4 * 100);
+    means[type] = counts[type] ? sums[type] / counts[type] : 4; // 1〜7
+    normalized[type] = Math.round((means[type] - 1) / 6 * 100);
   }
 
-  // 最高スコアのタイプを判定
-  let primaryType = HEXAD_ORDER[0];
-  let maxScore = -1;
-  for (const type of HEXAD_ORDER) {
-    if (normalized[type] > maxScore) {
-      maxScore = normalized[type];
-      primaryType = type;
-    }
-  }
+  const maxMean = Math.max(...HEXAD_ORDER.map((t) => means[t]));
+  const tied = HEXAD_ORDER.filter((t) => means[t] === maxMean);
+  const primaryType = tied[Math.floor(Math.random() * tied.length)];
 
   return {
     primaryType,
     scores: normalized,
+    means,
+    tiedTypes: tied.length > 1 ? tied : null,
     rationale: `アンケート結果から「${HEXAD_TYPES[primaryType].label}」タイプが最も強く現れました。`,
     method: 'survey',
   };
@@ -1414,7 +1417,7 @@ function loadNextSentence(session) {
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
-$('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
+$('#btn-goto-survey').addEventListener('click', () => { StudyFlow.openSurvey(); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(false); });
 
 function startGameFlow() {
@@ -1746,6 +1749,7 @@ function onGameFinished(result, isFullTime) {
   // クリア判定・連続記録・自己ベストの更新は、statsを今回の結果で書き換える「前」に行う。
   // （そうしないと今回出した自己ベストがそのまま次の目標値になり、自己矛盾する）
   const clearStatus = evaluateClearStatus(result, type);
+  StudyFlow.recordClear(clearStatus.cleared);
   if (clearStatus.cleared) {
     stats.currentStreak = (stats.currentStreak || 0) + 1;
     stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
@@ -1875,19 +1879,8 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、初回プレイ開始から10分以上経過した後のプレイ終了時に表示する（待機時間も含む）
-  // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const firstLog = getLog()[0];
-  const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
-  const timeGateMet = Date.now() - firstStartMs >= 10 * 60 * 1000;
-  const surveyBox = $('#survey-cta-box');
-  if (surveyBox) {
-    surveyBox.style.display = timeGateMet ? 'block' : 'none';
-  }
-  const exportUi = $('#secret-export-ui');
-  if (exportUi && timeGateMet) {
-    exportUi.style.display = 'block';
-  }
+  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;
   updateSurveyStepState();
@@ -1962,6 +1955,7 @@ const CSV_DL_KEY = 'gtp_csv_downloaded_count';
 // STEP 1（CSVダウンロード）が済むまでは、STEP 2（アンケート）のボタンを押せないようにする。
 // 新しいプレイ記録が増えたら、もう一度ダウンロードするまで再び無効になる。
 function updateSurveyStepState() {
+  return; // 本実験ではCSVダウンロードの手順を廃止（アンケートはアプリ内で回答し、自動でDBに送信する）
   const btn = $('#btn-goto-survey');
   if (!btn) return;
   let downloaded = 0;
@@ -2036,7 +2030,7 @@ function bootApp() {
 
     // 隠しコマンド2: FORM (Googleフォームを開く)
     if (secretBuffer.toUpperCase().endsWith('FORM') || secretCodeBuffer.slice(-4).join(',') === 'KeyF,KeyO,KeyR,KeyM') {
-      window.open(SURVEY_URL, '_blank');
+      StudyFlow.openSurvey();
       secretBuffer = '';
       secretCodeBuffer = [];
     }

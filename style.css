@@ -601,3 +601,46 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 .study-time li:last-child { border-bottom: none; }
 .study-time strong { font-family: "JetBrains Mono", Consolas, monospace; }
 .study-time .hint { margin: 0; }
+
+/* ---------- 本実験の進行（study-flow.js） ---------- */
+.study-time ol.study-steps { list-style: none; margin: 0 0 10px; padding: 0; counter-reset: step; }
+.study-time ol.study-steps li { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; align-items: baseline; }
+.study-time ol.study-steps li span::before { counter-increment: step; content: counter(step) ". "; color: var(--text-muted); }
+.study-time ol.study-steps li em { grid-column: 1 / -1; font-style: normal; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+.study-time .howto { margin-top: 6px; }
+.study-time .howto summary { cursor: pointer; font-size: 0.9rem; color: var(--text-secondary); }
+.study-time .howto ul { list-style: disc; padding-left: 1.2em; margin: 6px 0 0; }
+.study-time .howto li { display: list-item; border-bottom: none; padding: 2px 0; font-size: 0.85rem; }
+.study-time .howto strong { font-family: inherit; }
+.device-warning { margin: 0 0 14px; padding: 10px 12px; border-radius: 6px; background: color-mix(in srgb, var(--warning) 28%, var(--surface-1)); font-size: 0.9rem; }
+
+.study-progress {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 50;
+  padding: 6px 14px; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
+  background: var(--surface-1); color: var(--text-primary); border: 1.5px solid var(--baseline);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08); white-space: nowrap; pointer-events: none;
+}
+.study-progress[data-phase="free"], .study-progress[data-phase="over"] { border-color: var(--good); }
+.study-gate-note { margin: 20px 0 0; padding: 14px 16px; border-radius: 6px; border: 1.5px dashed var(--baseline); line-height: 1.6; }
+.study-gate-note .hint { display: inline-block; margin-top: 4px; }
+
+/* アプリ内アンケート */
+.ps-card h2 { margin-top: 4px; }
+.ps-progress { height: 6px; border-radius: 999px; background: var(--gridline); overflow: hidden; margin-bottom: 6px; }
+.ps-progress span { display: block; height: 100%; background: var(--theme-color, var(--type-achiever)); transition: width .3s ease; }
+.ps-q { font-weight: 500; line-height: 1.6; }
+.ps-num { color: var(--theme-color, var(--type-achiever)); font-weight: 700; margin-right: 0.5em; }
+.ps-optional { margin-left: 0.5em; font-size: 0.75rem; color: var(--text-muted); border: 1px solid var(--baseline); border-radius: 999px; padding: 0 6px; }
+.ps-item { scroll-margin: 80px; }
+.ps-item.missing { outline: 2px solid var(--critical); outline-offset: 4px; border-radius: 6px; }
+.likert7 label { padding: 8px 0; font-size: 0.9rem; }
+.likert7-ends { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.choice-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice-list label { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--baseline); border-radius: 8px; cursor: pointer; font-size: 0.9rem; }
+.choice-list label:has(input:checked) { border-color: var(--type-achiever); background: color-mix(in srgb, var(--type-achiever) 12%, transparent); }
+.ps-text { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--baseline); background: var(--page); color: var(--text-primary); font: inherit; font-size: 0.95rem; resize: vertical; }
+.ps-error { color: var(--critical); font-size: 0.9rem; margin: 12px 0 0; }
+.ps-warn { color: var(--critical); font-size: 0.85rem; font-weight: 600; margin: 0 0 10px; }
+.ps-nav { justify-content: space-between; }
+.ps-debrief { text-align: left; margin-top: 20px; padding: 14px 16px; border-radius: 6px; background: var(--page); font-size: 0.9rem; }
+.ps-debrief h3 { margin-top: 0; }

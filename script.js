@@ -566,15 +566,18 @@ function evaluateClearStatus(result, type) {
   let targetCpm = 120;
   if (diff === 'short') targetCpm = 100;
   if (diff === 'long') targetCpm = 150;
+  const ease = StudyFlow.easeFactor(); // 連続で失敗したらクリア目標を下げる（難易度の下限）
+  targetCpm = Math.round(targetCpm * ease);
 
   // 2. 文字数の目標値（制限時間で変動し、自己ベストを超えるとさらに上がる）
   let targetChars = 100;
   if (timeLimit) {
     targetChars = Math.floor(timeLimit * 1.5); // 例: 60秒なら90文字
   }
+  targetChars = Math.round(targetChars * ease);
 
   // 3. 文数の目標値（自己ベストを超えるとさらに上がる）
-  const targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
+  const targetSentences = Math.max(1, Math.round((timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3) * ease));
 
   switch (type) {
     case 'achiever':
@@ -619,7 +622,7 @@ function evaluateClearStatus(result, type) {
       // 変革者: 制限時間・目標レベルに応じたスコアを獲得（自己ベストを超えるとさらに上がる）
       const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-      const targetScore = timeLimit ? timeLimit * 2 : 150;
+      const targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * ease);
       const isDisruptorCleared = score >= targetScore;
       return {
         cleared: isDisruptorCleared,
@@ -631,7 +634,7 @@ function evaluateClearStatus(result, type) {
 
     case 'philanthropist':
       // 利他主義者: 制限時間に応じた文字数を貢献（自己ベストを超えるとさらに上がる）
-      const targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
+      const targetPhilChars = Math.round((timeLimit ? Math.floor(timeLimit * 1.0) : 80) * ease);
       const isPhilCleared = result.correctKeystrokes >= targetPhilChars;
       return {
         cleared: isPhilCleared,
@@ -771,7 +774,6 @@ function $(sel) { return document.querySelector(sel); }
    参加者番号 / 群の取得（?pid=&group= で渡される想定）
    ============================================================ */
 const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
-const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
 const DEFAULT_GROUP = 'A'; // このページ(index.html)はA群（AIチャット診断）固定
 
 function initParticipantInfo() {
@@ -944,7 +946,8 @@ let isChatting = false;
 function renderSurvey() {
   $('#chat-messages').innerHTML = '';
   conversationId = "";
-  appendChatMessage('ai', 'こんにちは！まずはあなたの好きなゲームのジャンルや、ゲームをプレイする目的（例：友達と遊ぶ、アイテムを集める、ストーリーを楽しむ、腕を磨く、自由に探検するなど）を教えてください！選択肢のない質問には、自由に文章で答えてもらってもかまいません。');
+  // 最初の質問はタイプを連想させる例を出さず、自由に話してもらう（AIが答えに合わせて次の質問を選ぶ）
+  appendChatMessage('ai', 'こんにちは！あなたに合ったタイピング練習にするため、ゲームやふだんのことについて少しだけお話を聞かせてください（4〜5回のやりとりで終わります）。\n選択肢が出たら、ボタンを押して答えても、自由に書いて答えてもかまいません。\nまずは、最近ハマっているゲームや趣味（ゲーム以外でもOK）と、それのどんなところが楽しいかを教えてください。');
   $('#chat-input').value = '';
   $('#btn-chat-send').disabled = false;
 }
@@ -961,13 +964,15 @@ function appendChatMessage(role, text) {
     let hasChoices = false;
     let choicesHtml = '';
     
-    if (text.includes('1.') || text.includes('1、')) {
+    // 選択肢の行（例:「1. 〜」）をボタンにする。行頭の空白・全角数字・「1)」「1）」「1．」の形にも対応する
+    const CHOICE_LINE = /^\s*([0-9０-９]+)\s*[\.\、\)）．]\s*(.+)$/;
+    if (text.split('\n').some((l) => CHOICE_LINE.test(l))) {
       const lines = text.split('\n');
       let mainText = [];
       let buttons = [];
       
       lines.forEach(line => {
-        const m = line.match(/^(\d+)[\.\、]\s*(.+)$/);
+        const m = line.match(CHOICE_LINE);
         if (m) {
           buttons.push(m[2].trim());
         } else {
@@ -1067,131 +1072,165 @@ function getUserChatText() {
     .join('\n');
 }
 
-$('#btn-chat-finish').addEventListener('click', async () => {
-  if (isChatting) return;
-  
-  const btn = $('#btn-chat-finish');
-  const originalText = btn.textContent;
-  
-  showScreen('screen-analyzing');
-  
-  try {
-    const userText = getUserChatText();
-    const chatText = $('#chat-messages').innerText || '';
-    const finalPrompt = `あなたはHexadゲーミフィケーションユーザータイプの診断者です。以下の会話から、ユーザーの動機づけのタイプを判定してください。
+/* ============================================================
+   AI対話の判定（精度重視）
+   会話の記録から「この人がHexad-12の12問に答えたら何点をつけるか（1〜7）」をAIに推定させ、
+   Hexad-12と同じ計算（タイプごとに2項目の平均）でタイプを決める。
+   ・事後アンケートのHexad-12と物差しがそろうので、1問ごとのずれや6タイプの順位相関で精度を検証できる
+   ・同じ会話で3回同時に推定して平均し、1回ごとのばらつきを減らす
+   ============================================================ */
+const HEX12_ITEMS = PostSurveyItems.ALL_ITEMS.filter((it) => it.scale === 'HEX');
+const CLASSIFY_RUNS = 3;
+let isClassifying = false;
 
-【6タイプの定義】
-- achiever（達成者）: 目標の達成・スキルの習熟・自分の上達そのものに満足感を得る。「上手くなりたい」「目標をクリアしたい」「苦手を克服したい」
-- player（プレイヤー）: 報酬が動機。ポイント・コイン・景品・ご褒美・ランキング上位・実績バッジ・レアアイテムの収集・勝つこと。「何かもらえるならやる」「ポイントが貯まると嬉しい」「集めたい」
-- socialiser（社交家）: 他者との交流・つながり・比較が動機。「友達と一緒に」「みんなの記録が気になる」「誰かと競いたい」
-- freeSpirit（自由人）: 自律・探索・自分のペースが動機。「自由に選びたい」「いろいろ試したい」「縛られたくない」
-- philanthropist（利他主義者）: 他者や社会への貢献が動機。「誰かの役に立ちたい」「人に教えたい」
-- disruptor（変革者）: 既存の枠組みを変えることが動機。「ルールを変えたい」「新しいやり方を試したい」「裏をかきたい」
+function buildItemRatingPrompt(userText, chatText) {
+  const typeLabel = { philanthropist: '慈善家', socialiser: '社交家', freeSpirit: '自由主義者', achiever: '達成者', player: 'プレイヤー', disruptor: '変革者' };
+  const itemLines = HEX12_ITEMS.map((it) => `${it.id}（${typeLabel[it.hexadType]}）: ${it.text}`).join('\n');
+  return `あなたはHexadゲーミフィケーションユーザータイプの診断者です。以下の会話を読み、このユーザーが次の12の質問（Hexad-12）に回答したとしたら、それぞれ何点をつけるかを推定してください。
+点数は 1＝まったくそう思わない 〜 7＝とてもそう思う の7段階（整数）です。
 
-【判定ルール】
-1. 根拠にしてよいのは【ユーザーの発言】だけです。AIの質問文に含まれる語句（目標・達成など）は根拠にしないでください。
-2. achiever を初期値や無難な答えとして選ばないでください。上達・目標達成そのものへの言及が明確なときだけ高くします。
-3. 「報酬・ポイント・景品・ご褒美・ランキング・集める・勝つ」への関心が目立つ場合は player を優先します。「目標がある」というだけでは achiever にしません。
-4. scores は0〜100で、タイプ間にはっきり差をつけてください。primaryType は scores が最大のタイプと必ず一致させてください。
-5. rationale には、判断の根拠になったユーザーの発言を引用して1〜2文で書いてください。
+【12の質問】
+${itemLines}
 
-次のJSON形式のみを出力してください（挨拶やJSON以外のテキストは含めない）。
-{"primaryType":"<scoresが最大のタイプ名>","scores":{"achiever":<0-100>,"player":<0-100>,"socialiser":<0-100>,"freeSpirit":<0-100>,"philanthropist":<0-100>,"disruptor":<0-100>},"rationale":"<根拠>"}
+【推定のルール】
+1. 根拠にしてよいのは【ユーザーの発言】だけです（ユーザーが選んだ選択肢の文も、ユーザーの発言として扱います）。AIの質問文や、選ばれなかった選択肢の言葉は根拠にしないでください。
+2. 会話がゲームの話でも、その人の「ふだんの傾向」としてどう答えるかを考えてください。
+3. 直接の根拠がない質問は、関連する発言から推測してください。手がかりがまったくなければ 4 にします。
+4. 根拠の強さに差があるときは、点数にもはっきり差をつけてください（全部を 4 付近にしない）。「当てはまらない」と分かる発言があれば 1〜3 にします。
+5. 同じタイプの2問は、ふつう大きく食い違いません。
+6. 「やり込み」「勝ちたい」「集めたい」は理由で判断します（上達のため→達成者、報酬・収集のため→プレイヤー、人との関わりのため→社交家）。
+
+次のJSONだけを出力してください（前置き・コードブロック記号・説明は不要）。
+{"items":{"HEX01":<1-7>,"HEX02":<1-7>,"HEX03":<1-7>,"HEX04":<1-7>,"HEX05":<1-7>,"HEX06":<1-7>,"HEX07":<1-7>,"HEX08":<1-7>,"HEX09":<1-7>,"HEX10":<1-7>,"HEX11":<1-7>,"HEX12":<1-7>},"evidence":{"philanthropist":"<根拠の要約>","socialiser":"<根拠の要約>","freeSpirit":"<根拠の要約>","achiever":"<根拠の要約>","player":"<根拠の要約>","disruptor":"<根拠の要約>"},"rationale":"<ユーザーの言葉を引用しながら、この人が何に楽しさややる気を感じる人だと思ったかを1〜2文で、ユーザーに語りかける口調で。タイプ名は書かない>"}
 
 【ユーザーの発言】
 ${userText}
 
 【会話全体（文脈の参考。AIの発言は根拠にしない）】
 ${chatText}`;
+}
 
+async function requestItemRatings(prompt) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
+  try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ 
-        message: finalPrompt
-      }),
+      body: JSON.stringify({ message: prompt }),
+      signal: ctrl.signal,
     });
-    
-    if (res.ok) {
-      const data = await res.json();
-      const answerText = data.answer || '';
-      
-      const firstBrace = answerText.indexOf('{');
-      const lastBrace = answerText.lastIndexOf('}');
-      
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        const jsonStr = answerText.substring(firstBrace, lastBrace + 1);
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const result = normalizeHexadResult(parsed);
-          if (result) {
-            appState.hexadResult = result;
-            localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
-            $('#result-fallback-note').style.display = 'none';
-            renderResult(result);
-            showScreen('screen-result');
-            return;
-          }
-        } catch (e) {
-          console.error("JSON Parse error:", e, "Raw output:", jsonStr);
-        }
-      } else {
-        console.warn("LLM format mismatch. Raw answer:", answerText);
-      }
-      
+    if (!res.ok) return null;
+    const data = await res.json();
+    const ans = data.answer || '';
+    const a = ans.indexOf('{');
+    const b = ans.lastIndexOf('}');
+    if (a === -1 || b <= a) return null;
+    const parsed = JSON.parse(ans.slice(a, b + 1));
+    const raw = parsed.items || {};
+    const items = {};
+    for (const it of HEX12_ITEMS) {
+      const v = Math.round(Number(raw[it.id]));
+      if (!(v >= 1 && v <= 7)) return null;
+      items[it.id] = v;
     }
-  } catch (err) {
-    console.error("Dify final evaluation error:", err);
+    return { items, evidence: parsed.evidence || null, rationale: typeof parsed.rationale === 'string' ? parsed.rationale : '' };
+  } catch (e) {
+    console.warn('判定リクエストの失敗:', e);
+    return null;
   } finally {
-    btn.textContent = originalText;
+    clearTimeout(timer);
   }
+}
 
+function aggregateItemRatings(runs) {
+  const itemRatings = {};
+  HEX12_ITEMS.forEach((it) => {
+    itemRatings[it.id] = Math.round((runs.reduce((sum, r) => sum + r.items[it.id], 0) / runs.length) * 100) / 100;
+  });
+  const means = {};
+  const scores = {};
+  HEXAD_ORDER.forEach((t) => {
+    const ids = HEX12_ITEMS.filter((it) => it.hexadType === t).map((it) => it.id);
+    means[t] = Math.round((ids.reduce((sum, id) => sum + itemRatings[id], 0) / ids.length) * 1000) / 1000;
+    scores[t] = Math.round(((means[t] - 1) / 6) * 100);
+  });
+  // 最高得点が同点なら、同点のタイプからランダムに選ぶ（特定のタイプに偏らないように）
+  const maxMean = Math.max(...HEXAD_ORDER.map((t) => means[t]));
+  const tied = HEXAD_ORDER.filter((t) => Math.abs(means[t] - maxMean) < 1e-9);
+  const primaryType = tied[Math.floor(Math.random() * tied.length)];
+  const withRationale = runs.find((r) => r.rationale);
+  return {
+    primaryType,
+    scores,
+    means,
+    itemRatings,
+    tiedTypes: tied.length > 1 ? tied : null,
+    runs: runs.length,
+    runItems: runs.map((r) => r.items),
+    evidence: runs[0].evidence,
+    rationale: withRationale ? withRationale.rationale : '',
+    method: 'llm_items',
+  };
+}
+
+// AIの判定がすべて失敗したときの予備：ユーザーの発言のキーワードから簡易判定する
+function keywordFallbackResult() {
   // AIの質問文に含まれる語句（「目標」「達成」など）で達成者に偏らないよう、ユーザーの発言だけを集計する
   const chatText = getUserChatText();
-
   const KEYWORDS = {
     achiever: /上達|上手く|うまく|成長|スキル|極め|克服|習熟|腕を上げ|レベルアップ|目標を達成|目標達成|自己ベスト|記録を更新|速く打て/g,
     player: /報酬|ポイント|コイン|景品|ご褒美|ごほうび|ランキング|スコア|勝ち|勝つ|勝負|アイテム|レア|集め|コレクション|ガチャ|ゲーム|バッジ|実績|トロフィー|もらえ|獲得/g,
     socialiser: /友達|友人|仲間|みんな|一緒に|皆|交流|つながり|ワイワイ|誰かと|他の人|ライバル|対戦|共有|チーム/g,
     freeSpirit: /自由|探求|探索|マイペース|自分のペース|自分なり|いろいろ|色々|好きに|発見|気ままに|縛られ|選べ|試し/g,
     philanthropist: /貢献|誰かのため|人のため|役に立|役立|教える|協力|サポート|助け|手伝|社会/g,
-    disruptor: /変革|ルールを変|ルールを破|型破り|常識|壊す|裏をかく|独自|変わった|新しいやり方|実験/g
+    disruptor: /変革|ルールを変|ルールを破|型破り|常識|壊す|裏をかく|独自|変わった|新しいやり方|実験/g,
   };
   const typeCounts = {};
-  for (const [type, re] of Object.entries(KEYWORDS)) {
-    typeCounts[type] = (chatText.match(re) || []).length;
-  }
-
+  for (const [type, re] of Object.entries(KEYWORDS)) typeCounts[type] = (chatText.match(re) || []).length;
   const totalCount = Object.values(typeCounts).reduce((a, b) => a + b, 0);
   const maxCount = Math.max(...Object.values(typeCounts));
-  // 手がかりが全く無い場合や同点の場合に、特定タイプ（達成者）へ偏らないよう中立的なタイプを選ぶ。
-  // 同点時は発言に出てきた順ではなく、HEXAD_ORDERの末尾側から選ぶ。
-  let bestType = 'freeSpirit';
-  if (maxCount > 0) {
-    const tied = HEXAD_ORDER.filter((t) => typeCounts[t] === maxCount);
-    bestType = tied[tied.length - 1];
-  }
-
+  const tied = maxCount > 0 ? HEXAD_ORDER.filter((t) => typeCounts[t] === maxCount) : HEXAD_ORDER.slice();
+  const bestType = tied[Math.floor(Math.random() * tied.length)];
   const calculatedScores = {};
-  for (const type of Object.keys(typeCounts)) {
-    if (totalCount === 0) {
-      calculatedScores[type] = 50;
-    } else {
-      calculatedScores[type] = Math.min(100, Math.round(20 + (typeCounts[type] / totalCount) * 80));
-    }
+  for (const type of HEXAD_ORDER) {
+    calculatedScores[type] = totalCount === 0 ? 50 : Math.min(100, Math.round(20 + (typeCounts[type] / totalCount) * 80));
   }
+  return { primaryType: bestType, scores: calculatedScores, rationale: '会話内容から各要素の強さを推測しました。', method: 'keyword_fallback' };
+}
 
-  appState.hexadResult = {
-    primaryType: bestType,
-    scores: calculatedScores,
-    rationale: '会話内容から各要素の強さを推測しました。'
-  };
-  localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(appState.hexadResult));
-  
-  $('#result-fallback-note').style.display = 'block';
-  renderResult(appState.hexadResult);
-  showScreen('screen-result');
+async function runFinalClassification() {
+  if (isClassifying) return;
+  isClassifying = true;
+  showScreen('screen-analyzing');
+  try {
+    const prompt = buildItemRatingPrompt(getUserChatText(), $('#chat-messages').innerText || '');
+    const results = await Promise.all(Array.from({ length: CLASSIFY_RUNS }, () => requestItemRatings(prompt)));
+    const runs = results.filter(Boolean);
+    let result;
+    if (runs.length) {
+      result = aggregateItemRatings(runs);
+      $('#result-fallback-note').style.display = 'none';
+    } else {
+      result = keywordFallbackResult();
+      $('#result-fallback-note').style.display = 'block';
+    }
+    appState.hexadResult = result;
+    localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
+    renderResult(result);
+    showScreen('screen-result');
+  } finally {
+    isClassifying = false;
+  }
+}
+
+$('#btn-chat-finish').addEventListener('click', () => {
+  if (isChatting) return;
+  runFinalClassification();
 });
+
+// AIの締めの発言（「診断の準備ができました」）が出たら、ボタンを押さなくても自動で判定に進む
+const CHAT_CLOSING_PATTERN = /準備ができました/;
 
 async function handleChatSend() {
   const input = $('#chat-input');
@@ -1240,27 +1279,15 @@ async function handleChatSend() {
     
     const answerText = data.answer || '';
     
+    // 旧版のプロンプトのように会話中にJSONが返ってきた場合も、その点数は使わず、精度重視の判定に回す
     const jsonMatch = answerText.match(/\{[\s\S]*"primaryType"[\s\S]*\}/);
-    
     if (jsonMatch) {
-      let cleanText = answerText.replace(jsonMatch[0], '').trim();
+      const cleanText = answerText.replace(jsonMatch[0], '').trim();
       if (cleanText) appendChatMessage('ai', cleanText);
-      
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const result = normalizeHexadResult(parsed);
-        if (!result) throw new Error('empty result');
-        appState.hexadResult = result;
-        localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
-        setTimeout(() => {
-          renderResult(result);
-          showScreen('screen-result');
-        }, 1500);
-      } catch(e) {
-        appendChatMessage('ai', '判定結果の解析に失敗しました。もう一度教えていただけますか？');
-      }
+      setTimeout(runFinalClassification, 1200);
     } else {
       appendChatMessage('ai', answerText);
+      if (CHAT_CLOSING_PATTERN.test(answerText)) setTimeout(runFinalClassification, 1500);
     }
   } catch (err) {
     if(container.contains(loadingDiv)) container.removeChild(loadingDiv);
@@ -1703,7 +1730,7 @@ function loadNextSentence(session) {
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
-$('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
+$('#btn-goto-survey').addEventListener('click', () => { StudyFlow.openSurvey(); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(false); });
 
 function startGameFlow() {
@@ -2034,6 +2061,7 @@ function onGameFinished(result, isFullTime) {
   // クリア判定・連続記録・自己ベストの更新は、statsを今回の結果で書き換える「前」に行う。
   // （そうしないと今回出した自己ベストがそのまま次の目標値になり、自己矛盾する）
   const clearStatus = evaluateClearStatus(result, type);
+  StudyFlow.recordClear(clearStatus.cleared);
   if (clearStatus.cleared) {
     stats.currentStreak = (stats.currentStreak || 0) + 1;
     stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
@@ -2089,7 +2117,7 @@ function onGameFinished(result, isFullTime) {
     nickname: appState.nickname,
     hexadType: type,
     hexadScores: appState.hexadResult ? appState.hexadResult.scores : null,
-    classifyMethod: appState.hexadResult ? appState.hexadResult.method : 'rule',
+    classifyMethod: appState.hexadResult ? (appState.hexadResult.method || appState.classifyMethod) : 'rule',
     sentenceCategory: appState.setup.category,
     difficulty: appState.setup.difficulty,
     timeLimitSec: game.timeLimitSec,
@@ -2166,19 +2194,8 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、初回プレイ開始から10分以上経過した後のプレイ終了時に表示する（待機時間も含む）
-  // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const firstLog = getLog()[0];
-  const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
-  const timeGateMet = Date.now() - firstStartMs >= 10 * 60 * 1000;
-  const surveyBox = $('#survey-cta-box');
-  if (surveyBox) {
-    surveyBox.style.display = timeGateMet ? 'block' : 'none';
-  }
-  const exportUi = $('#secret-export-ui');
-  if (exportUi && timeGateMet) {
-    exportUi.style.display = 'block';
-  }
+  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;
   updateSurveyStepState();
@@ -2253,6 +2270,7 @@ const CSV_DL_KEY = 'gtp_csv_downloaded_count';
 // STEP 1（CSVダウンロード）が済むまでは、STEP 2（アンケート）のボタンを押せないようにする。
 // 新しいプレイ記録が増えたら、もう一度ダウンロードするまで再び無効になる。
 function updateSurveyStepState() {
+  return; // 本実験ではCSVダウンロードの手順を廃止（アンケートはアプリ内で回答し、自動でDBに送信する）
   const btn = $('#btn-goto-survey');
   if (!btn) return;
   let downloaded = 0;
@@ -2327,7 +2345,7 @@ function bootApp() {
 
     // 隠しコマンド2: FORM (Googleフォームを開く)
     if (secretBuffer.toUpperCase().endsWith('FORM') || secretCodeBuffer.slice(-4).join(',') === 'KeyF,KeyO,KeyR,KeyM') {
-      window.open(SURVEY_URL, '_blank');
+      StudyFlow.openSurvey();
       secretBuffer = '';
       secretCodeBuffer = [];
     }
