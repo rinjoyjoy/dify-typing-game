@@ -472,23 +472,30 @@ const THANKS_MESSAGES = [
 ];
 
 // 記録されているリーダーボード内での自分の順位を算出（社交家用）
+// みんなの記録（DB）と、自分のこの参加での記録を合わせた一覧
+function communityBoardWithMe(stats) {
+  const others = stats.communityBoard || [];
+  const mine = (stats.leaderboard || []).slice(0, 1).map((r) => ({ ...r, isMe: true }));
+  return [...others, ...mine].sort((a, b) => b.cpm - a.cpm);
+}
+
 function computeGlobalRank(stats, myCpm) {
-  const board = stats.leaderboard || [];
+  const board = communityBoardWithMe(stats).filter((r) => !r.isMe);
   if (!board.length || myCpm == null) return null;
   const better = board.filter((r) => r.cpm > myCpm).length;
-  return { rank: better + 1, total: board.length };
+  return { rank: better + 1, total: board.length + 1 };
 }
 
 // 社交家用：記録の中で自分のすぐ上にいる「次のライバル」（他の参加者）を探す
 function findNextRival(stats, myCpm) {
-  const others = (stats.leaderboard || []).filter((r) => r.name !== appState.nickname);
+  const others = stats.communityBoard || [];
   const above = others.filter((r) => r.cpm > (myCpm == null ? -Infinity : myCpm)).sort((a, b) => a.cpm - b.cpm);
   return above.length ? above[0] : null;
 }
 
 // 社交家用：他の参加者の記録を偽りなく「みんなの記録」として見せる（自己ベスト表と違い、実際に他者が見える）
 function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
-  const board = (stats.leaderboard || []).slice().sort((a, b) => b.cpm - a.cpm);
+  const board = communityBoardWithMe(stats);
   if (!board.length) {
     return `<div class="community-board-box" style="margin-top:12px;"><p class="hint">まだ記録がありません。あなたが最初の記録を作りましょう！</p></div>`;
   }
@@ -498,11 +505,12 @@ function renderCommunityLeaderboardHtml(stats, currentCpm = null) {
       <h3 style="margin-top:0; font-size:1.05rem; color:var(--text-primary);">${icon('globe')}みんなの記録 TOP 5</h3>
       <ul style="list-style:none; padding:0; margin:8px 0 0 0;">
         ${top.map((r, idx) => {
-          const isMe = r.name === appState.nickname && currentCpm !== null && r.cpm === currentCpm;
+          // 「あなた」の判定はニックネームではなく、自分の記録かどうかで行う（同じニックネームの他の参加者と混同しないように）
+          const isMe = !!r.isMe;
           const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '';
           return `
             <li style="display:flex; justify-content:space-between; padding:5px 8px; border-bottom:1px solid #eee; ${isMe ? 'background:rgba(42,120,214,0.15); font-weight:bold;' : ''}">
-              <span>第${idx + 1}位 ${isMe ? '今回' : ''} ${r.name === appState.nickname ? '（あなた）' : escapeHtml(r.name)}</span>
+              <span>第${idx + 1}位 ${isMe ? '（あなた）' : escapeHtml(r.name)}</span>
               <span><strong>${r.cpm}</strong> 文字/分 (正確率 ${r.accuracy}%) <small style="color:var(--text-muted);">${dateStr}</small></span>
             </li>
           `;
@@ -838,11 +846,12 @@ async function fetchStatsFromVercelDb() {
         if (data.communityTotal > stats.communityTotal) {
           stats.communityTotal = data.communityTotal;
         }
-        if (data.leaderboard && data.leaderboard.length) {
-          const mergedMap = new Map();
-          [...stats.leaderboard, ...data.leaderboard.map(r => ({ name: r.nickname, cpm: r.cpm, accuracy: r.accuracy, date: r.created_at }))]
-            .forEach(item => mergedMap.set(`${item.name}_${item.cpm}_${item.accuracy}`, item));
-          stats.leaderboard = Array.from(mergedMap.values()).sort((a, b) => b.cpm - a.cpm).slice(0, 20);
+        // DBの「みんなの記録」は、自分の記録（自己ベスト）とは別に持つ。
+        // 以前は自己ベストの一覧に混ぜていたため、他の参加者や過去のテストの記録が「あなたの自己ベスト」に出ていた
+        if (Array.isArray(data.leaderboard)) {
+          stats.communityBoard = data.leaderboard
+            .map(r => ({ name: r.nickname, cpm: r.cpm, accuracy: r.accuracy, date: r.created_at }))
+            .sort((a, b) => b.cpm - a.cpm).slice(0, 20);
         }
         saveStats(stats);
       }
