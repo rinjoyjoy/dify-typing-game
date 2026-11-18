@@ -185,7 +185,7 @@
     const exportUi = qs('#secret-export-ui'); if (exportUi) exportUi.style.display = 'none';
     const label = qs('.step-label', box); if (label) label.style.display = 'none';
     const stepNote = qs('#survey-step-note'); if (stepNote) stepNote.style.display = 'none';
-    const ctaText = qs('.survey-cta-text', box); if (ctaText) ctaText.textContent = 'プレイおつかれさまでした。最後にアンケート（約8分）にご協力ください。';
+    const ctaText = qs('.survey-cta-text', box); if (ctaText) ctaText.textContent = 'プレイおつかれさまでした。最後にアンケートにご協力ください。';
     if (goBtn) { goBtn.disabled = false; goBtn.lastChild.textContent = 'アンケートに進む'; }
 
     const st = playState();

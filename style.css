@@ -647,3 +647,20 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 
 .resume-choice { margin-top: 18px; padding: 14px 16px; border-radius: 6px; border: 1.5px dashed var(--baseline); line-height: 1.6; }
 .resume-choice p { margin: 0 0 8px; }
+
+/* 番号入力画面：全体の流れ（3ステップ） */
+.study-time ol.flow { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; grid-template-columns: 1fr 20px 1fr 20px 1fr; align-items: stretch; gap: 4px; }
+.study-time ol.flow li.flow-step { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; text-align: center; gap: 4px; padding: 14px 10px 12px; border: 1.5px solid var(--baseline); border-bottom: 1.5px solid var(--baseline); border-radius: 8px; background: var(--surface-1); }
+.flow-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.flow-num { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--type-achiever); color: #fff; font-weight: 700; font-size: 0.85rem; }
+.flow-icon { width: 26px; height: 26px; fill: none; stroke: var(--text-primary); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.flow-step p { margin: 0; }
+.flow-title { font-weight: 700; font-size: 1rem; }
+.flow-time { font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; font-size: 0.85rem; color: var(--type-achiever); }
+.flow-desc { font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; margin-top: 2px !important; }
+.flow-arrow { display: flex; align-items: center; justify-content: center; }
+.flow-arrow svg { width: 20px; height: 20px; fill: none; stroke: var(--text-muted); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 560px) {
+  .study-time ol.flow { grid-template-columns: 1fr; }
+  .flow-arrow svg { transform: rotate(90deg); }
+}
