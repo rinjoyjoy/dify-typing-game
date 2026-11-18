@@ -19,6 +19,9 @@ module.exports = async function handler(req, res) {
       timeLimitSec = null,
       participantId = null,
       group = null,
+      mistakes = null,
+      classifyMethod = null,
+      hexadScores = null,
     } = req.body || {};
 
     const str = (v, max, fallback) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : fallback);
@@ -29,8 +32,8 @@ module.exports = async function handler(req, res) {
 
     const sql = `
       INSERT INTO typing_sessions
-      (nickname, hexad_type, cpm, accuracy, sentences_completed, correct_keystrokes, elapsed_sec, category, difficulty, time_limit_sec, participant_id, participant_group)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      (nickname, hexad_type, cpm, accuracy, sentences_completed, correct_keystrokes, elapsed_sec, category, difficulty, time_limit_sec, participant_id, participant_group, mistakes, classify_method, hexad_scores)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING id, created_at;
     `;
 
@@ -47,6 +50,9 @@ module.exports = async function handler(req, res) {
       timeLimitSec == null ? null : Math.round(num(timeLimitSec, 0, 36000)),
       str(participantId, 50, null),
       str(group, 10, null),
+      mistakes == null ? null : Math.round(num(mistakes, 0, 100000)),
+      str(classifyMethod, 20, null),
+      hexadScores && typeof hexadScores === 'object' ? JSON.stringify(hexadScores).slice(0, 2000) : null,
     ];
 
     const result = await query(sql, values);

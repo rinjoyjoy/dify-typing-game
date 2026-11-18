@@ -561,13 +561,16 @@ function evaluateClearStatus(result, type) {
   let targetCpm = 120;
   if (diff === 'short') targetCpm = 100;
   if (diff === 'long') targetCpm = 150;
+  const ease = StudyFlow.easeFactor(); // 連続で失敗したらクリア目標を下げる（難易度の下限）
+  targetCpm = Math.round(targetCpm * ease);
 
   let targetChars = 100;
   if (timeLimit) {
     targetChars = Math.floor(timeLimit * 1.5);
   }
+  targetChars = Math.round(targetChars * ease);
 
-  const targetSentences = timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3;
+  const targetSentences = Math.max(1, Math.round((timeLimit ? Math.max(1, Math.floor(timeLimit / 20)) : 3) * ease));
 
   switch (type) {
     case 'achiever': {
@@ -608,7 +611,7 @@ function evaluateClearStatus(result, type) {
     case 'disruptor': {
       const rule = getDisruptorRule(appState.setup.rule || 'chaos', stats);
       const score = rule.calc(result.cpm, result.accuracy, result.correctKeystrokes);
-      const targetScore = timeLimit ? timeLimit * 2 : 150;
+      const targetScore = Math.round((timeLimit ? timeLimit * 2 : 150) * ease);
       const isDisruptorCleared = score >= targetScore;
       return {
         cleared: isDisruptorCleared,
@@ -619,7 +622,7 @@ function evaluateClearStatus(result, type) {
       };
     }
     case 'philanthropist': {
-      const targetPhilChars = timeLimit ? Math.floor(timeLimit * 1.0) : 80;
+      const targetPhilChars = Math.round((timeLimit ? Math.floor(timeLimit * 1.0) : 80) * ease);
       const isPhilCleared = result.correctKeystrokes >= targetPhilChars;
       return {
         cleared: isPhilCleared,
@@ -757,7 +760,6 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
    参加者番号 / 群の取得（?pid=&group= で渡される想定）
    ============================================================ */
 const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
-const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
 const DEFAULT_GROUP = 'B'; // このページ(index-survey-only.html)はB群（アンケート診断）固定
 
 function initParticipantInfo() {
@@ -1414,7 +1416,7 @@ function loadNextSentence(session) {
 $('#btn-start-game').addEventListener('click', () => startGameFlow());
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
-$('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
+$('#btn-goto-survey').addEventListener('click', () => { StudyFlow.openSurvey(); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(false); });
 
 function startGameFlow() {
@@ -1746,6 +1748,7 @@ function onGameFinished(result, isFullTime) {
   // クリア判定・連続記録・自己ベストの更新は、statsを今回の結果で書き換える「前」に行う。
   // （そうしないと今回出した自己ベストがそのまま次の目標値になり、自己矛盾する）
   const clearStatus = evaluateClearStatus(result, type);
+  StudyFlow.recordClear(clearStatus.cleared);
   if (clearStatus.cleared) {
     stats.currentStreak = (stats.currentStreak || 0) + 1;
     stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
@@ -1875,19 +1878,8 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、初回プレイ開始から10分以上経過した後のプレイ終了時に表示する（待機時間も含む）
-  // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const firstLog = getLog()[0];
-  const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
-  const timeGateMet = Date.now() - firstStartMs >= 10 * 60 * 1000;
-  const surveyBox = $('#survey-cta-box');
-  if (surveyBox) {
-    surveyBox.style.display = timeGateMet ? 'block' : 'none';
-  }
-  const exportUi = $('#secret-export-ui');
-  if (exportUi && timeGateMet) {
-    exportUi.style.display = 'block';
-  }
+  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;
   updateSurveyStepState();
@@ -1962,6 +1954,7 @@ const CSV_DL_KEY = 'gtp_csv_downloaded_count';
 // STEP 1（CSVダウンロード）が済むまでは、STEP 2（アンケート）のボタンを押せないようにする。
 // 新しいプレイ記録が増えたら、もう一度ダウンロードするまで再び無効になる。
 function updateSurveyStepState() {
+  return; // 本実験ではCSVダウンロードの手順を廃止（アンケートはアプリ内で回答し、自動でDBに送信する）
   const btn = $('#btn-goto-survey');
   if (!btn) return;
   let downloaded = 0;
@@ -2036,7 +2029,7 @@ function bootApp() {
 
     // 隠しコマンド2: FORM (Googleフォームを開く)
     if (secretBuffer.toUpperCase().endsWith('FORM') || secretCodeBuffer.slice(-4).join(',') === 'KeyF,KeyO,KeyR,KeyM') {
-      window.open(SURVEY_URL, '_blank');
+      StudyFlow.openSurvey();
       secretBuffer = '';
       secretCodeBuffer = [];
     }

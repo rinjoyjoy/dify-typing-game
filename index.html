@@ -7,7 +7,7 @@
   <title>タイピング練習</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 
 <body>
@@ -16,13 +16,23 @@
       <div class="card">
         <h1>タイピング練習</h1>
         <p class="lead">はじめに、あらかじめお伝えしている「参加者番号」を入力してください。</p>
+        <p id="device-warning" class="device-warning" style="display:none;">スマートフォン・タブレットではなく、<strong>パソコンとキーボード</strong>で参加してください。</p>
         <div class="study-time">
-          <p class="study-time-title">所要時間の目安（約20分）</p>
-          <ul>
-            <li><span>プレイ</span><strong>約15分</strong></li>
-            <li><span>アンケート</span><strong>約5分</strong></li>
-          </ul>
-          <p class="hint">プレイ開始から一定時間がたつと、アンケートの案内が自動で表示されます。表示されたら案内に従って回答してください。</p>
+          <p class="study-time-title">全体の流れ（合計 約20分）</p>
+          <ol class="study-steps">
+            <li><span>準備</span><strong>1〜4分</strong><em>参加者によって、始める前に質問がある場合があります</em></li>
+            <li><span>タイピング</span><strong>約5分</strong><em>画面上部に「アンケートまで あと○分」が表示されます。その後は続けて遊んでもかまいません</em></li>
+            <li><span>アンケート</span><strong>約8分</strong><em>結果画面に「アンケートに進む」が出たら回答してください。回答は自動で送信されます</em></li>
+          </ol>
+          <details class="howto">
+            <summary>タイピングの遊び方</summary>
+            <ul>
+              <li>「スタート」を押したら、表示された文を<strong>ローマ字</strong>で入力します（日本語入力はオフにしてください）。</li>
+              <li>1回のプレイは制限時間まで、または「終了して結果を見る」を押すまで続きます。</li>
+              <li>入力中のかなを打ち直したいときは Backspace キーを押します。</li>
+              <li>うまく打てなくても大丈夫です。自分のペースで遊んでください。</li>
+            </ul>
+          </details>
         </div>
         <div class="field">
           <label for="pid-input">参加者番号</label>
@@ -342,6 +352,8 @@
 
   <script src="icons.js"></script>
   <script src="survey-data.js"></script>
+  <script src="post-survey-items.js"></script>
+  <script src="study-flow.js"></script>
   <script>
     'use strict';
     // 参加者番号を3で割った余りで3群に割り付ける。番号を送信するまでは
@@ -349,6 +361,8 @@
     //   余り 1 → A群: AIチャット診断 → ゲーム → アンケート
     //   余り 2 → B群: アンケート診断 → ゲーム → アンケート
     //   余り 0（3の倍数） → C群: 診断なし・ゲームのみ → アンケート
+    // ※ 群の記号は中間発表スライド（A=診断なし／C=AI対話）と逆。集計CSVの condition 列（AI対話／アンケート／診断なし）で確認すること。
+    // 番号を 1, 2, 3, … の順に配れば、3人ごとに各群1人ずつになる（各群の人数がそろう）。
     (function () {
       const GROUP_CONFIG = {
         A: { template: 'tpl-group-a', script: 'script.js' },
@@ -390,6 +404,7 @@
         try {
           localStorage.setItem('gtp_participant_meta', JSON.stringify({ pid: String(n), group }));
         } catch (e) {}
+        if (window.StudyFlow) StudyFlow.mark('entry');
 
         btn.disabled = true;
         btn.textContent = '読み込み中...';
@@ -425,6 +440,13 @@
           btn.textContent = 'はじめる';
         }
       }
+
+      // タッチ操作のみの端末（スマホ・タブレット）では注意を出す
+      try {
+        if (navigator.maxTouchPoints > 0 && !window.matchMedia('(pointer: fine)').matches) {
+          qs('#device-warning').style.display = 'block';
+        }
+      } catch (e) {}
 
       qs('#btn-enter').addEventListener('click', enterStudy);
       qs('#pid-input').addEventListener('keydown', (e) => {

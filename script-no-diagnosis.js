@@ -364,6 +364,8 @@ function evaluateClearStatus(result) {
   let targetCpm = 120;
   if (diff === 'short') targetCpm = 100;
   if (diff === 'long') targetCpm = 150;
+  const ease = StudyFlow.easeFactor(); // 連続で失敗したらクリア目標を下げる（難易度の下限）
+  targetCpm = Math.round(targetCpm * ease);
 
   const isCleared = result.cpm >= targetCpm && result.accuracy >= 90;
   return {
@@ -486,7 +488,6 @@ function $all(sel) { return Array.from(document.querySelectorAll(sel)); }
    参加者番号 / 群の取得（?pid=&group= で渡される想定）
    ============================================================ */
 const PARTICIPANT_STORAGE_KEY = 'gtp_participant_meta';
-const SURVEY_URL = 'https://forms.gle/CZLPNUX4T4yoJBmg8';
 const DEFAULT_GROUP = 'C'; // このページ(index-no-diagnosis.html)はC群（診断なし）固定
 
 function initParticipantInfo() {
@@ -705,8 +706,8 @@ function loadNextSentence(session) {
 $('#btn-start-game').addEventListener('click', () => { if (capturePidOrShowError()) startGameFlow(); });
 $('#btn-play-again').addEventListener('click', () => startGameFlow());
 $('#btn-back-setup').addEventListener('click', () => { renderSetup(); showScreen('screen-setup'); });
-$('#btn-goto-survey').addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
-$('#btn-goto-survey-export')?.addEventListener('click', () => { window.open(SURVEY_URL, '_blank'); });
+$('#btn-goto-survey').addEventListener('click', () => { StudyFlow.openSurvey(); });
+$('#btn-goto-survey-export')?.addEventListener('click', () => { StudyFlow.openSurvey(); });
 $('#btn-end-session').addEventListener('click', () => { if (game && !game.endTime) finishSession(); });
 
 function startGameFlow() {
@@ -881,6 +882,7 @@ function onGameFinished(result) {
 
   // クリア判定・連続記録の更新は、statsを今回の結果で書き換える「前」に行う。
   const clearStatus = evaluateClearStatus(result);
+  StudyFlow.recordClear(clearStatus.cleared);
   if (clearStatus.cleared) {
     stats.currentStreak = (stats.currentStreak || 0) + 1;
     stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
@@ -989,20 +991,8 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // アンケートへの案内・研究データのエクスポートは、初回プレイ開始（保存済みログ先頭）から
-  // 10分以上経過した後のプレイ終了時に表示する（プレイしていない時間も含む）（「記録を削除」でログを消せばゲートも連動してリセットされる）
-  // （FORM／DE-TAコマンドを使えば、この条件を満たしていなくてもいつでも呼び出せる）
-  const firstLog = getLog()[0];
-  const firstStartMs = firstLog ? Date.parse(firstLog.timestamp) - (Number(firstLog.elapsedSec) || 0) * 1000 : Date.now();
-  const timeGateMet = Date.now() - firstStartMs >= 10 * 60 * 1000;
-  const surveyBox = $('#survey-cta-box');
-  if (surveyBox) {
-    surveyBox.style.display = timeGateMet ? 'block' : 'none';
-  }
-  const exportUi = $('#secret-export-ui');
-  if (exportUi) {
-    exportUi.style.display = timeGateMet ? 'block' : 'none';
-  }
+  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;
   updateSurveyStepState();
@@ -1017,6 +1007,7 @@ const CSV_DL_KEY = 'gtp_csv_downloaded_count';
 // STEP 1（CSVダウンロード）が済むまでは、STEP 2（アンケート）のボタンを押せないようにする。
 // 新しいプレイ記録が増えたら、もう一度ダウンロードするまで再び無効になる。
 function updateSurveyStepState() {
+  return; // 本実験ではCSVダウンロードの手順を廃止（アンケートはアプリ内で回答し、自動でDBに送信する）
   const btn = $('#btn-goto-survey');
   if (!btn) return;
   let downloaded = 0;
@@ -1083,7 +1074,7 @@ function bootApp() {
       secretCodeBuffer = [];
     }
     if (secretBuffer.toUpperCase().endsWith('FORM') || secretCodeBuffer.slice(-4).join(',') === 'KeyF,KeyO,KeyR,KeyM') {
-      window.open(SURVEY_URL, '_blank');
+      StudyFlow.openSurvey();
       secretBuffer = '';
       secretCodeBuffer = [];
     }
