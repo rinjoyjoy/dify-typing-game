@@ -7,46 +7,125 @@
   <title>研究者用ページ</title>
   <link rel="stylesheet" href="style.css?v=6">
   <style>
-    .admin-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--gridline); }
-    .admin-section h2 { margin: 0 0 8px; font-size: 1.1rem; }
-    .admin-counts { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .admin-counts th, .admin-counts td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--gridline); }
-    .admin-counts td.num { font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; }
+    body { padding-bottom: 40px; }
+    #app { max-width: 1120px; }
+    #app .card.admin { max-width: none; }
+    .admin-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+    .admin-section { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--gridline); }
+    .admin-section h2 { margin: 0 0 4px; font-size: 1.1rem; }
+    .admin-section > .hint { margin: 0 0 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .kpi { border: 1.5px solid var(--baseline); border-radius: 10px; padding: 12px 14px; background: var(--surface-1); }
+    .kpi .label { font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+    .kpi .value { font-family: "JetBrains Mono", Consolas, monospace; font-size: 1.6rem; font-weight: 700; line-height: 1.3; }
+    .kpi .value small { font-size: 0.9rem; color: var(--text-secondary); }
+    .kpi .sub { font-size: 0.8rem; color: var(--text-secondary); }
+    .bar { height: 8px; border-radius: 999px; background: var(--gridline); overflow: hidden; margin: 6px 0 4px; }
+    .bar span { display: block; height: 100%; background: var(--text-primary); }
+    .kpi.next { border-color: var(--text-primary); }
+    .tbl-wrap { overflow-x: auto; border: 1px solid var(--gridline); border-radius: 8px; }
+    table.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; white-space: nowrap; }
+    table.tbl th, table.tbl td { padding: 7px 10px; border-bottom: 1px solid var(--gridline); text-align: left; }
+    table.tbl th { background: var(--page); font-weight: 700; position: sticky; top: 0; }
+    table.tbl td.num { text-align: right; font-family: "JetBrains Mono", Consolas, monospace; }
+    table.tbl tr:last-child td { border-bottom: none; }
+    .badge { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; border: 1px solid var(--baseline); }
+    .badge.ok { background: color-mix(in srgb, var(--good) 15%, transparent); border-color: var(--good); }
+    .badge.wip { background: color-mix(in srgb, var(--warning) 25%, transparent); border-color: var(--warning); }
+    .badge.dup { background: color-mix(in srgb, var(--critical) 15%, transparent); border-color: var(--critical); }
+    .filters { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: 0.9rem; }
+    .btn-sm { padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; border: 1px solid var(--baseline); background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+    .btn-sm.danger { border-color: var(--critical); color: var(--critical); }
     .admin-dl { display: flex; flex-wrap: wrap; gap: 8px; }
     .admin-dl a { text-decoration: none; }
-    .admin-radio { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+    .admin-danger { border: 1.5px solid var(--critical); border-radius: 10px; padding: 14px 16px; }
+    .admin-radio { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 12px; }
     .admin-radio label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .admin-danger { border: 1.5px solid var(--critical); border-radius: 8px; padding: 14px 16px; }
     .admin-msg { margin: 10px 0 0; font-weight: 600; }
     .admin-msg.err { color: var(--critical); }
-    input[type="date"], input[type="password"], input[type="text"].admin-confirm { font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--baseline); background: var(--page); color: var(--text-primary); }
+    input[type="date"], input[type="password"], input[type="number"], input[type="text"].admin-input { font: inherit; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--baseline); background: var(--page); color: var(--text-primary); }
+    input[type="number"] { width: 90px; }
+    dialog { max-width: 820px; width: calc(100% - 32px); border: 1.5px solid var(--text-primary); border-radius: 12px; padding: 0; background: var(--surface-1); color: var(--text-primary); }
+    dialog::backdrop { background: rgba(0,0,0,0.35); }
+    .dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--gridline); position: sticky; top: 0; background: var(--surface-1); }
+    .dlg-body { padding: 14px 18px 20px; max-height: 75vh; overflow: auto; }
+    .dlg-body h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .qa { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 0.85rem; }
+    .qa .q { color: var(--text-secondary); }
+    .qa .a { font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; text-align: right; }
+    .qa .a.text { font-family: inherit; font-weight: 500; text-align: left; grid-column: 1 / -1; padding: 4px 8px; background: var(--page); border-radius: 6px; white-space: pre-wrap; }
+    .chat { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; }
+    .chat div { padding: 6px 10px; border-radius: 8px; max-width: 85%; white-space: pre-wrap; }
+    .chat .ai { background: var(--page); align-self: flex-start; }
+    .chat .user { background: color-mix(in srgb, var(--text-primary) 10%, transparent); align-self: flex-end; }
   </style>
 </head>
 <body>
   <div id="app">
     <section class="screen active">
-      <div class="card">
-        <h1>研究者用ページ</h1>
-        <p class="lead">データの確認・ダウンロード・削除ができます。参加者には見せないでください。</p>
-
-        <div class="field">
-          <label for="key">合言葉（Vercel の RESEARCH_EXPORT_KEY）</label>
-          <input type="password" id="key" autocomplete="off">
+      <div class="card admin">
+        <div class="admin-top">
+          <div>
+            <h1>研究者用ページ</h1>
+            <p class="lead" style="margin:0;">実験の進み具合の確認、データのダウンロード・削除ができます。参加者には見せないでください。</p>
+          </div>
+          <button id="btn-refresh" class="btn btn-secondary" style="display:none;">最新の状態に更新</button>
         </div>
-        <div class="button-row"><button id="btn-login" class="btn btn-primary">開く</button></div>
-        <p id="login-msg" class="admin-msg err" style="display:none;"></p>
+
+        <div id="login" class="admin-section">
+          <div class="field">
+            <label for="key">合言葉（Vercel の RESEARCH_EXPORT_KEY）</label>
+            <input type="password" id="key" autocomplete="off">
+          </div>
+          <label style="font-size:0.85rem;"><input type="checkbox" id="remember"> このブラウザで合言葉を覚える</label>
+          <div class="button-row"><button id="btn-login" class="btn btn-primary">開く</button></div>
+          <p id="login-msg" class="admin-msg err" style="display:none;"></p>
+        </div>
 
         <div id="panel" style="display:none;">
+          <!-- 進捗 -->
           <div class="admin-section">
-            <h2>保存されている件数</h2>
-            <table class="admin-counts">
-              <thead><tr><th>種類</th><th>件数</th><th>最初</th><th>最後</th></tr></thead>
-              <tbody id="counts"></tbody>
-            </table>
+            <h2>進み具合</h2>
+            <p class="hint">アンケートまで回答した人数です。参加者番号900以上はテストとして数えません。目標人数：<input type="number" id="target" min="1" value="10"> 人／群</p>
+            <div class="kpis" id="kpis"></div>
           </div>
 
+          <!-- 群ごとの集計 -->
+          <div class="admin-section">
+            <h2>群ごとの集計（速報）</h2>
+            <p class="hint">回答済みの人の平均です（テストの900番台を除く）。尺度は5段階の平均。正式な分析はCSVで行ってください。</p>
+            <div class="tbl-wrap"><table class="tbl" id="group-table"></table></div>
+          </div>
+
+          <!-- 参加者一覧 -->
+          <div class="admin-section">
+            <h2>参加者一覧</h2>
+            <div class="filters">
+              <label><input type="checkbox" id="hide-test" checked> テスト（900番以上）を隠す</label>
+              <label>状態：
+                <select id="status-filter">
+                  <option value="all">すべて</option>
+                  <option value="responded">回答済み</option>
+                  <option value="unfinished">途中（アンケート未回答）</option>
+                </select>
+              </label>
+              <label>条件：
+                <select id="group-filter">
+                  <option value="all">すべて</option>
+                  <option value="A">AI対話</option>
+                  <option value="B">アンケート</option>
+                  <option value="C">診断なし</option>
+                </select>
+              </label>
+            </div>
+            <div class="tbl-wrap"><table class="tbl" id="people-table"></table></div>
+            <p id="row-msg" class="admin-msg" style="display:none;"></p>
+          </div>
+
+          <!-- CSV -->
           <div class="admin-section">
             <h2>CSVをダウンロード</h2>
+            <p class="hint">ExcelやGoogleスプレッドシートでそのまま開けます。テストの記録も含まれるので、分析の前に除いてください。</p>
             <div class="admin-dl">
               <a class="btn btn-primary" id="dl-summary">分析用（回答ごとに1行）</a>
               <a class="btn btn-secondary" id="dl-sessions">プレイ1回ごとの記録</a>
@@ -54,17 +133,19 @@
             </div>
           </div>
 
+          <!-- 削除 -->
           <div class="admin-section">
-            <h2>記録を削除する</h2>
+            <h2>記録をまとめて削除する</h2>
             <div class="admin-danger">
-              <p>削除した記録は<strong>元に戻せません</strong>。必要なら先にCSVをダウンロードしてください。</p>
+              <p style="margin-top:0;">削除した記録は<strong>元に戻せません</strong>。必要なら先にCSVをダウンロードしてください。1人分だけ消すときは、参加者一覧の「削除」を使います。</p>
               <div class="admin-radio">
-                <label><input type="radio" name="scope" value="since" checked> この日（日本時間）以降の記録だけ消す <input type="date" id="since"></label>
+                <label><input type="radio" name="scope" value="pid_range" checked> 参加者番号 <input type="number" id="pid-from" value="900"> 〜 <input type="number" id="pid-to" value="999"> の記録を消す（テストの削除に）</label>
+                <label><input type="radio" name="scope" value="since"> この日（日本時間）以降の記録をすべて消す <input type="date" id="since"></label>
                 <label><input type="radio" name="scope" value="all"> すべての記録を消す（予備実験のプレイ記録も消えます）</label>
               </div>
               <div class="field">
                 <label for="confirm">確認のため「削除する」と入力してください</label>
-                <input type="text" id="confirm" class="admin-confirm" autocomplete="off">
+                <input type="text" id="confirm" class="admin-input" autocomplete="off">
               </div>
               <div class="button-row"><button id="btn-delete" class="btn btn-secondary">削除を実行</button></div>
               <p id="delete-msg" class="admin-msg" style="display:none;"></p>
@@ -75,22 +156,66 @@
     </section>
   </div>
 
+  <dialog id="dlg">
+    <div class="dlg-head"><strong id="dlg-title">詳細</strong><button class="btn-sm" id="dlg-close">閉じる</button></div>
+    <div class="dlg-body" id="dlg-body"></div>
+  </dialog>
+
+  <script src="post-survey-items.js"></script>
   <script>
     (function () {
       const $ = (s) => document.querySelector(s);
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const TYPE_JA = { achiever: '達成者', player: 'プレイヤー', socialiser: '社交家', freeSpirit: '自由主義者', philanthropist: '慈善家', disruptor: '変革者' };
+      const COND = { A: 'AI対話', B: 'アンケート', C: '診断なし' };
+      const TEST_MIN = 900;
       let key = '';
+      let data = null;
 
-      // 今日の日付（日本時間）を初期値にする
-      const jst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-      $('#since').value = jst;
+      $('#since').value = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      try {
+        const saved = localStorage.getItem('admin_key'); if (saved) { $('#key').value = saved; $('#remember').checked = true; }
+        const t = localStorage.getItem('admin_target'); if (t) $('#target').value = t;
+      } catch (e) {}
 
-      function fmt(t) { return t ? new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'; }
-      function showCounts(c) {
-        $('#counts').innerHTML = [
-          ['プレイ記録', c.sessions],
-          ['アンケート回答', c.surveys],
-        ].map(([label, r]) => `<tr><td>${label}</td><td class="num">${r.n}</td><td>${fmt(r.first)}</td><td>${fmt(r.last)}</td></tr>`).join('');
+      const fmtTime = (t) => t ? new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+      const fmtNum = (v, d = 1) => (v === null || v === undefined || v === '') ? '—' : (Math.round(Number(v) * 10 ** d) / 10 ** d).toString();
+      const fmtSec = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) || Number(v) < 0) ? '—' : `${Math.floor(Number(v) / 60)}分${String(Math.round(Number(v) % 60)).padStart(2, '0')}秒`;
+      const typeList = (s) => { const ts = String(s || '').split('|').filter(Boolean).map((t) => TYPE_JA[t] || t); if (!ts.length) return '—'; return ts.length > 2 ? `${ts.length}タイプが同点` : ts.join('・'); };
+      const isTest = (r) => Number(r.participant_id) >= TEST_MIN;
+
+      async function api(params) {
+        const res = await fetch(`/api/admin?key=${encodeURIComponent(key)}${params || ''}`);
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { const e = new Error(d.error || res.status); e.status = res.status; e.code = d.error; throw e; }
+        return d;
       }
+
+      async function login() {
+        key = $('#key').value.trim();
+        const msg = $('#login-msg'); msg.style.display = 'none';
+        if (!key) return;
+        try {
+          data = await api('');
+        } catch (e) {
+          msg.textContent = e.code === 'not_configured'
+            ? 'Vercel に RESEARCH_EXPORT_KEY が設定されていません。設定して再デプロイしてから開いてください。'
+            : e.status === 403 ? '合言葉が違います。' : '読み込みに失敗しました（' + e.message + '）。';
+          msg.style.display = 'block'; return;
+        }
+        try { if ($('#remember').checked) localStorage.setItem('admin_key', key); else localStorage.removeItem('admin_key'); } catch (e) {}
+        $('#login').style.display = 'none';
+        $('#panel').style.display = 'block';
+        $('#btn-refresh').style.display = '';
+        setLinks();
+        renderAll();
+      }
+
+      async function refresh() {
+        const btn = $('#btn-refresh'); btn.disabled = true; btn.textContent = '更新中...';
+        try { data = await api(''); renderAll(); } finally { btn.disabled = false; btn.textContent = '最新の状態に更新'; }
+      }
+
       function setLinks() {
         const k = encodeURIComponent(key);
         $('#dl-summary').href = `/api/export?key=${k}`;
@@ -98,53 +223,171 @@
         $('#dl-raw').href = `/api/export?key=${k}&type=raw`;
       }
 
-      async function login() {
-        key = $('#key').value.trim();
-        const msg = $('#login-msg');
-        msg.style.display = 'none';
-        if (!key) return;
-        const res = await fetch(`/api/admin?key=${encodeURIComponent(key)}`);
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 500 && data.error === 'not_configured') {
-          msg.textContent = 'Vercel に RESEARCH_EXPORT_KEY が設定されていません。設定して再デプロイしてから開いてください。';
-          msg.style.display = 'block'; return;
-        }
-        if (!res.ok) { msg.textContent = '合言葉が違います。'; msg.style.display = 'block'; return; }
-        showCounts(data.counts);
-        setLinks();
-        $('#panel').style.display = 'block';
+      function renderAll() { renderKpis(); renderGroups(); renderPeople(); }
+
+      function renderKpis() {
+        const target = Math.max(1, Number($('#target').value) || 10);
+        const real = data.responded.filter((r) => !isTest(r));
+        const unf = data.unfinished.filter((r) => !isTest(r));
+        const cards = ['A', 'B', 'C'].map((g) => {
+          const n = real.filter((r) => r.group === g).length;
+          const u = unf.filter((r) => r.group === g).length;
+          const pct = Math.min(100, Math.round((n / target) * 100));
+          return `<div class="kpi"><div class="label">${COND[g]}群（${g}）</div>
+            <div class="value">${n}<small> / ${target}人</small></div>
+            <div class="bar"><span style="width:${pct}%"></span></div>
+            <div class="sub">途中でアンケート未回答：${u}人</div></div>`;
+        });
+        const total = real.length;
+        cards.push(`<div class="kpi"><div class="label">合計</div><div class="value">${total}<small> / ${target * 3}人</small></div>
+          <div class="bar"><span style="width:${Math.min(100, Math.round((total / (target * 3)) * 100))}%"></span></div>
+          <div class="sub">プレイ記録 ${data.counts.sessions.n}件・回答 ${data.counts.surveys.n}件（テスト含む）</div></div>`);
+        cards.push(`<div class="kpi next"><div class="label">次に配る参加者番号</div><div class="value">${data.next.pid}</div>
+          <div class="sub">→ ${esc(data.next.condition)}群になります</div></div>`);
+        $('#kpis').innerHTML = cards.join('');
       }
 
-      async function doDelete() {
-        const msg = $('#delete-msg');
-        msg.className = 'admin-msg'; msg.style.display = 'none';
-        const scope = document.querySelector('input[name="scope"]:checked').value;
-        if ($('#confirm').value.trim() !== '削除する') {
-          msg.textContent = '確認欄に「削除する」と入力してください。'; msg.className = 'admin-msg err'; msg.style.display = 'block'; return;
+      function renderGroups() {
+        // テストを除いて、画面側で集計し直す
+        const real = data.responded.filter((r) => !isTest(r));
+        const mean = (rs, k) => { const v = rs.map((r) => r[k]).filter((x) => x !== '' && x !== null && x !== undefined).map(Number).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+        const pct = (rs, k) => { const v = rs.map((r) => r[k]).filter((x) => x === 0 || x === 1); return v.length ? `${Math.round(v.filter((x) => x === 1).length / v.length * 100)}%` : '—'; };
+        const rows = ['A', 'B', 'C'].map((g) => {
+          const rs = real.filter((r) => r.group === g);
+          return `<tr><td>${COND[g]}</td><td class="num">${rs.length}</td>
+            <td class="num">${fmtNum(mean(rs, 'ONB'), 2)}</td><td class="num">${fmtNum(mean(rs, 'FIT'), 2)}</td><td class="num">${fmtNum(mean(rs, 'ENJ'), 2)}</td>
+            <td class="num">${fmtNum(mean(rs, 'RET'), 2)}</td><td class="num">${fmtNum(mean(rs, 'RED'), 2)}</td>
+            <td class="num">${fmtSec(mean(rs, 'prestart_sec'))}</td><td class="num">${g === 'C' ? '—' : fmtSec(mean(rs, 'diagnosis_sec'))}</td>
+            <td class="num">${fmtSec(mean(rs, 'free_play_sec'))}</td>
+            <td class="num">${g === 'B' ? '（基準）' : pct(rs, 'assigned_is_top')}</td><td class="num">${g === 'B' ? '（基準）' : pct(rs, 'assigned_in_top2')}</td>
+            <td class="num">${g === 'A' ? fmtNum(mean(rs, 'ai_item_mae'), 2) : '—'}</td></tr>`;
+        });
+        $('#group-table').innerHTML = `<thead><tr><th>条件</th><th>人数</th><th title="開始前の負担（低いほど楽）">ONB↓</th><th>FIT</th><th>ENJ</th><th>RET</th><th>RED</th>
+          <th>開始前の時間</th><th>診断の時間</th><th>自由継続</th><th>タイプ1位一致</th><th>上位2位以内</th><th>AIのずれ</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+      }
+
+      function renderPeople() {
+        const hideTest = $('#hide-test').checked;
+        const st = $('#status-filter').value;
+        const gf = $('#group-filter').value;
+        let list = [...data.responded, ...data.unfinished];
+        if (hideTest) list = list.filter((r) => !isTest(r));
+        if (st !== 'all') list = list.filter((r) => r.kind === st);
+        if (gf !== 'all') list = list.filter((r) => r.group === gf);
+        list.sort((a, b) => (Number(b.participant_id) || 0) - (Number(a.participant_id) || 0));
+        if (!list.length) { $('#people-table').innerHTML = '<tbody><tr><td>該当する記録はありません。</td></tr></tbody>'; return; }
+        const rows = list.map((r, i) => {
+          const status = r.kind === 'responded' ? '<span class="badge ok">回答済み</span>' : '<span class="badge wip">途中</span>';
+          const dup = Number(r.pid_duplicates) > 1 ? ' <span class="badge dup">番号重複</span>' : '';
+          const test = isTest(r) ? ' <span class="badge">テスト</span>' : '';
+          const match = r.kind !== 'responded' || !r.assigned_type ? '—' : r.assigned_is_top === 1 ? '◯' : r.assigned_in_top2 === 1 ? '△' : '×';
+          return `<tr>
+            <td class="num">${esc(r.participant_id)}</td><td>${esc(r.condition)}</td><td>${status}${dup}${test}</td>
+            <td class="num">${fmtNum(r.n_sessions, 0)}</td><td class="num">${fmtSec(r.total_play_sec)}</td>
+            <td class="num">${r.kind === 'responded' ? fmtSec(r.prestart_sec) : '—'}</td>
+            <td>${r.assigned_type ? TYPE_JA[r.assigned_type] || r.assigned_type : '—'}</td><td>${typeList(r.hex_top_types)}</td><td style="text-align:center;">${match}</td>
+            <td>${fmtTime(r.kind === 'responded' ? r.submitted_at : r.last_at)}</td>
+            <td>${r.kind === 'responded' ? `<button class="btn-sm" data-detail="${r.response_id}">詳細</button> ` : ''}<button class="btn-sm danger" data-del="${i}">削除</button></td></tr>`;
+        });
+        $('#people-table').innerHTML = `<thead><tr><th>番号</th><th>条件</th><th>状態</th><th>プレイ回数</th><th>プレイ時間</th><th>開始前の時間</th>
+          <th>割り当てタイプ</th><th>本人のHexad 1位</th><th>一致</th><th>最終更新</th><th></th></tr></thead><tbody>${rows.join('')}</tbody>`;
+        $('#people-table').querySelectorAll('[data-detail]').forEach((b) => b.addEventListener('click', () => openDetail(b.dataset.detail)));
+        $('#people-table').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => deleteOne(list[Number(b.dataset.del)])));
+      }
+
+      async function openDetail(id) {
+        const dlg = $('#dlg'); const body = $('#dlg-body');
+        body.innerHTML = '<p>読み込み中...</p>'; dlg.showModal();
+        try {
+          const { detail } = await api(`&action=detail&id=${encodeURIComponent(id)}`);
+          const p = detail.payload || {}; const a = detail.answers || {};
+          $('#dlg-title').textContent = `参加者番号 ${detail.participant_id}（${COND[detail.participant_group] || ''}）`;
+          const P = window.PostSurveyItems;
+          const sections = P.SECTIONS.map((sec) => {
+            const items = sec.items.filter((it) => a[it.id] !== undefined);
+            if (!items.length) return '';
+            return `<h3>${esc(sec.title)}</h3><div class="qa">${items.map((it) => {
+              let v = a[it.id];
+              if (it.type === 'choice') { const o = it.options.find((x) => x.value === String(v)); v = o ? o.label : v; }
+              const isText = it.type === 'text';
+              return isText ? `<div class="q">${esc(it.id)}：${esc(it.text)}</div><div class="a text">${esc(v)}</div>`
+                : `<div class="q">${esc(it.id)}：${esc(it.text)}</div><div class="a">${esc(v)}</div>`;
+            }).join('')}</div>`;
+          }).join('');
+          const hr = p.hexadResult || {};
+          const scores = hr.scores ? Object.entries(hr.scores).sort((x, y) => y[1] - x[1]).map(([t, v]) => `${TYPE_JA[t] || t} ${v}`).join(' ／ ') : '—';
+          const chat = Array.isArray(p.chatTranscript) && p.chatTranscript.length
+            ? `<h3>AIとの会話</h3><div class="chat">${p.chatTranscript.map((l) => `<div class="${l.role === 'user' ? 'user' : 'ai'}">${esc(l.text)}</div>`).join('')}</div>` : '';
+          const ev = p.events || {};
+          const evRows = [['番号入力', ev.entry], ['診断開始', ev.onboardingStart], ['診断終了', ev.onboardingEnd], ['初回プレイ', ev.firstGameStart], ['アンケートを選べるようになった', ev.freeChoiceShown], ['アンケート開始', ev.surveyStart], ['送信', ev.surveySubmit]]
+            .filter(([, t]) => t).map(([k, t]) => `<div class="q">${k}</div><div class="a">${new Date(t).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' })}</div>`).join('');
+          body.innerHTML = `
+            <h3>診断</h3><div class="qa">
+              <div class="q">割り当てタイプ</div><div class="a">${esc(TYPE_JA[hr.primaryType] || hr.primaryType || (detail.participant_group === 'C' ? '達成者（固定）' : '—'))}</div>
+              <div class="q">判定方法</div><div class="a">${esc(hr.method || p.classifyMethod || '—')}</div>
+              <div class="q" style="grid-column:1/-1;">6タイプの得点：${esc(scores)}</div>
+              ${hr.rationale ? `<div class="a text">${esc(hr.rationale)}</div>` : ''}
+            </div>
+            ${chat}
+            <h3>時刻</h3><div class="qa">${evRows || '<div class="q">記録なし</div>'}</div>
+            ${sections}
+            <h3>端末</h3><div class="qa"><div class="q" style="grid-column:1/-1;">${esc((p.client || {}).viewport || '')}　${esc((p.client || {}).userAgent || '')}</div></div>
+            <p class="hint" style="margin-top:16px;">参加ID：${esc(detail.entry_id || p.entryId || '—')}　回答ID：${esc(detail.id)}</p>`;
+        } catch (e) {
+          body.innerHTML = `<p class="admin-msg err">読み込みに失敗しました（${esc(e.message)}）。</p>`;
         }
+      }
+
+      async function postDelete(payload) {
+        const res = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'delete', confirm: '削除する', ...payload }) });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || res.status);
+        return d;
+      }
+
+      async function deleteOne(r) {
+        const msg = $('#row-msg'); msg.className = 'admin-msg'; msg.style.display = 'none';
+        const typed = prompt(`参加者番号 ${r.participant_id}（${r.condition}・${r.kind === 'responded' ? '回答済み' : '途中'}）の記録を削除します。元に戻せません。\n実行するには「削除する」と入力してください。`);
+        if (typed !== '削除する') return;
+        try {
+          const payload = { scope: 'entry' };
+          if (r.entry_id) payload.entryId = r.entry_id;
+          if (r.response_id) payload.responseId = r.response_id;
+          if (!payload.entryId && !payload.responseId) { payload.scope = 'pid_range'; payload.from = Number(r.participant_id); payload.to = Number(r.participant_id); }
+          const d = await postDelete(payload);
+          msg.textContent = `参加者番号 ${r.participant_id} の記録を削除しました（プレイ記録 ${d.deletedSessions} 件・回答 ${d.deletedSurveys} 件）。`;
+          msg.style.display = 'block';
+          await refresh();
+        } catch (e) {
+          msg.textContent = '削除に失敗しました（' + e.message + '）。'; msg.className = 'admin-msg err'; msg.style.display = 'block';
+        }
+      }
+
+      async function bulkDelete() {
+        const msg = $('#delete-msg'); msg.className = 'admin-msg'; msg.style.display = 'none';
+        if ($('#confirm').value.trim() !== '削除する') { msg.textContent = '確認欄に「削除する」と入力してください。'; msg.className = 'admin-msg err'; msg.style.display = 'block'; return; }
+        const scope = document.querySelector('input[name="scope"]:checked').value;
+        const payload = { scope };
+        if (scope === 'since') payload.since = $('#since').value;
+        if (scope === 'pid_range') { payload.from = Number($('#pid-from').value); payload.to = Number($('#pid-to').value); }
         const btn = $('#btn-delete'); btn.disabled = true; btn.textContent = '削除中...';
         try {
-          const res = await fetch('/api/admin', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key, action: 'delete', scope, since: $('#since').value, confirm: '削除する' }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.error || res.status);
-          msg.textContent = `削除しました（プレイ記録 ${data.deletedSessions} 件・アンケート回答 ${data.deletedSurveys} 件）。`;
-          msg.style.display = 'block';
-          showCounts(data.counts);
-          $('#confirm').value = '';
+          const d = await postDelete(payload);
+          msg.textContent = `削除しました（プレイ記録 ${d.deletedSessions} 件・アンケート回答 ${d.deletedSurveys} 件）。`;
+          msg.style.display = 'block'; $('#confirm').value = '';
+          await refresh();
         } catch (e) {
-          msg.textContent = '削除に失敗しました（' + e.message + '）。';
-          msg.className = 'admin-msg err'; msg.style.display = 'block';
-        } finally {
-          btn.disabled = false; btn.textContent = '削除を実行';
-        }
+          msg.textContent = '削除に失敗しました（' + e.message + '）。'; msg.className = 'admin-msg err'; msg.style.display = 'block';
+        } finally { btn.disabled = false; btn.textContent = '削除を実行'; }
       }
 
       $('#btn-login').addEventListener('click', login);
       $('#key').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
-      $('#btn-delete').addEventListener('click', doDelete);
+      $('#btn-refresh').addEventListener('click', refresh);
+      $('#btn-delete').addEventListener('click', bulkDelete);
+      $('#dlg-close').addEventListener('click', () => $('#dlg').close());
+      ['#hide-test', '#status-filter', '#group-filter'].forEach((s) => $(s).addEventListener('change', renderPeople));
+      $('#target').addEventListener('input', () => { try { localStorage.setItem('admin_target', $('#target').value); } catch (e) {} renderKpis(); });
     })();
   </script>
 </body>

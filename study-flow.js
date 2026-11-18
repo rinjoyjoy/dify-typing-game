@@ -65,7 +65,13 @@
     if (!box) return;
     const lines = Array.from(box.querySelectorAll('.chat-message'))
       .filter((el) => !el.classList.contains('loading'))
-      .map((el) => ({ role: el.classList.contains('user') ? 'user' : 'ai', text: (el.innerText || '').trim() }))
+      .map((el) => {
+        // 選択肢のボタンや「ゲームを始める」ボタンの文字は会話の記録に含めない
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('button').forEach((b) => b.remove());
+        clone.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+        return { role: el.classList.contains('user') ? 'user' : 'ai', text: (clone.textContent || '').trim() };
+      })
       .filter((l) => l.text);
     if (lines.length) save(KEYS.chat, lines);
   }
