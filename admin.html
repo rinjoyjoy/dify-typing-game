@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>研究者用ページ</title>
+  <link rel="stylesheet" href="style.css?v=6">
+  <style>
+    .admin-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--gridline); }
+    .admin-section h2 { margin: 0 0 8px; font-size: 1.1rem; }
+    .admin-counts { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .admin-counts th, .admin-counts td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--gridline); }
+    .admin-counts td.num { font-family: "JetBrains Mono", Consolas, monospace; font-weight: 700; }
+    .admin-dl { display: flex; flex-wrap: wrap; gap: 8px; }
+    .admin-dl a { text-decoration: none; }
+    .admin-radio { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+    .admin-radio label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .admin-danger { border: 1.5px solid var(--critical); border-radius: 8px; padding: 14px 16px; }
+    .admin-msg { margin: 10px 0 0; font-weight: 600; }
+    .admin-msg.err { color: var(--critical); }
+    input[type="date"], input[type="password"], input[type="text"].admin-confirm { font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--baseline); background: var(--page); color: var(--text-primary); }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <section class="screen active">
+      <div class="card">
+        <h1>研究者用ページ</h1>
+        <p class="lead">データの確認・ダウンロード・削除ができます。参加者には見せないでください。</p>
+
+        <div class="field">
+          <label for="key">合言葉（Vercel の RESEARCH_EXPORT_KEY）</label>
+          <input type="password" id="key" autocomplete="off">
+        </div>
+        <div class="button-row"><button id="btn-login" class="btn btn-primary">開く</button></div>
+        <p id="login-msg" class="admin-msg err" style="display:none;"></p>
+
+        <div id="panel" style="display:none;">
+          <div class="admin-section">
+            <h2>保存されている件数</h2>
+            <table class="admin-counts">
+              <thead><tr><th>種類</th><th>件数</th><th>最初</th><th>最後</th></tr></thead>
+              <tbody id="counts"></tbody>
+            </table>
+          </div>
+
+          <div class="admin-section">
+            <h2>CSVをダウンロード</h2>
+            <div class="admin-dl">
+              <a class="btn btn-primary" id="dl-summary">分析用（回答ごとに1行）</a>
+              <a class="btn btn-secondary" id="dl-sessions">プレイ1回ごとの記録</a>
+              <a class="btn btn-tertiary" id="dl-raw">アンケートの送信データ</a>
+            </div>
+          </div>
+
+          <div class="admin-section">
+            <h2>記録を削除する</h2>
+            <div class="admin-danger">
+              <p>削除した記録は<strong>元に戻せません</strong>。必要なら先にCSVをダウンロードしてください。</p>
+              <div class="admin-radio">
+                <label><input type="radio" name="scope" value="since" checked> この日（日本時間）以降の記録だけ消す <input type="date" id="since"></label>
+                <label><input type="radio" name="scope" value="all"> すべての記録を消す（予備実験のプレイ記録も消えます）</label>
+              </div>
+              <div class="field">
+                <label for="confirm">確認のため「削除する」と入力してください</label>
+                <input type="text" id="confirm" class="admin-confirm" autocomplete="off">
+              </div>
+              <div class="button-row"><button id="btn-delete" class="btn btn-secondary">削除を実行</button></div>
+              <p id="delete-msg" class="admin-msg" style="display:none;"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      const $ = (s) => document.querySelector(s);
+      let key = '';
+
+      // 今日の日付（日本時間）を初期値にする
+      const jst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      $('#since').value = jst;
+
+      function fmt(t) { return t ? new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'; }
+      function showCounts(c) {
+        $('#counts').innerHTML = [
+          ['プレイ記録', c.sessions],
+          ['アンケート回答', c.surveys],
+        ].map(([label, r]) => `<tr><td>${label}</td><td class="num">${r.n}</td><td>${fmt(r.first)}</td><td>${fmt(r.last)}</td></tr>`).join('');
+      }
+      function setLinks() {
+        const k = encodeURIComponent(key);
+        $('#dl-summary').href = `/api/export?key=${k}`;
+        $('#dl-sessions').href = `/api/export?key=${k}&type=sessions`;
+        $('#dl-raw').href = `/api/export?key=${k}&type=raw`;
+      }
+
+      async function login() {
+        key = $('#key').value.trim();
+        const msg = $('#login-msg');
+        msg.style.display = 'none';
+        if (!key) return;
+        const res = await fetch(`/api/admin?key=${encodeURIComponent(key)}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 500 && data.error === 'not_configured') {
+          msg.textContent = 'Vercel に RESEARCH_EXPORT_KEY が設定されていません。設定して再デプロイしてから開いてください。';
+          msg.style.display = 'block'; return;
+        }
+        if (!res.ok) { msg.textContent = '合言葉が違います。'; msg.style.display = 'block'; return; }
+        showCounts(data.counts);
+        setLinks();
+        $('#panel').style.display = 'block';
+      }
+
+      async function doDelete() {
+        const msg = $('#delete-msg');
+        msg.className = 'admin-msg'; msg.style.display = 'none';
+        const scope = document.querySelector('input[name="scope"]:checked').value;
+        if ($('#confirm').value.trim() !== '削除する') {
+          msg.textContent = '確認欄に「削除する」と入力してください。'; msg.className = 'admin-msg err'; msg.style.display = 'block'; return;
+        }
+        const btn = $('#btn-delete'); btn.disabled = true; btn.textContent = '削除中...';
+        try {
+          const res = await fetch('/api/admin', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key, action: 'delete', scope, since: $('#since').value, confirm: '削除する' }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || res.status);
+          msg.textContent = `削除しました（プレイ記録 ${data.deletedSessions} 件・アンケート回答 ${data.deletedSurveys} 件）。`;
+          msg.style.display = 'block';
+          showCounts(data.counts);
+          $('#confirm').value = '';
+        } catch (e) {
+          msg.textContent = '削除に失敗しました（' + e.message + '）。';
+          msg.className = 'admin-msg err'; msg.style.display = 'block';
+        } finally {
+          btn.disabled = false; btn.textContent = '削除を実行';
+        }
+      }
+
+      $('#btn-login').addEventListener('click', login);
+      $('#key').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+      $('#btn-delete').addEventListener('click', doDelete);
+    })();
+  </script>
+</body>
+</html>
