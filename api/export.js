@@ -110,6 +110,7 @@ async function summaryRows() {
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
     row.classify_method = p.classifyMethod || (hr && hr.method) || null;
+    row.hex_source = p.hexSource || 'post_survey'; // onboarding＝アンケート群が最初の診断で答えたHexad-12（診断と基準が同じ回答）
     HEXAD_ORDER.forEach((t) => { row[`assigned_score_${t}`] = hr && hr.scores ? hr.scores[t] ?? '' : ''; });
     const hexComplete = HEXAD_ORDER.every((t) => typeof hexMeans[t] === 'number');
     if (hexComplete) {

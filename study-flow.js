@@ -9,7 +9,7 @@
 
   const REQUIRED_PLAY_MS = 5 * 60 * 1000;   // 必須プレイ：初回のスタートから5分
   const MAX_PLAY_MS = 15 * 60 * 1000;       // これを過ぎたら「もう少し遊ぶ」を出さずにアンケートへ誘導
-  const ITEMS_VERSION = '2026-11-18';
+  const ITEMS_VERSION = '2026-11-18b';
 
   const KEYS = {
     events: 'gtp_study_events',
@@ -18,6 +18,7 @@
     submitted: 'gtp_survey_submitted',
     pending: 'gtp_survey_pending_payload',
     chat: 'gtp_chat_transcript',
+    onboardingAnswers: 'gtp_onboarding_answers',
     participant: 'gtp_participant_meta',
     log: 'gtp_log',
     hexadResult: 'gtp_hexad_result',
@@ -76,6 +77,11 @@
       case 'btn-start-survey-llm':   // AI対話群：診断開始
       case 'btn-start-survey':       // アンケート群：診断開始
         mark('onboardingStart');
+        break;
+      case 'btn-survey-submit':      // アンケート群：Hexad-12の回答を確定（最初の診断の回答を保存。事後アンケートで再利用する）
+        if (typeof appState !== 'undefined' && appState && appState.answers && !load(KEYS.onboardingAnswers, null)) {
+          save(KEYS.onboardingAnswers, { ...appState.answers });
+        }
         break;
       case 'btn-goto-setup':         // 診断結果を見て、練習の準備へ
         mark('onboardingEnd');
@@ -239,6 +245,19 @@
     window.scrollTo(0, 0);
   }
 
+  // アンケート群は、最初の診断でHexad-12に答えているので、事後アンケートのHexad-12のページを省く
+  function onboardingHexAnswers() {
+    const P = items();
+    const saved = load(KEYS.onboardingAnswers, null);
+    if (!saved || participant().group !== 'B') return null;
+    const hexIds = P.ALL_ITEMS.filter((it) => it.scale === 'HEX').map((it) => it.id);
+    return hexIds.every((id) => Number(saved[id]) >= 1) ? saved : null;
+  }
+  function activeSections() {
+    const P = items();
+    return onboardingHexAnswers() ? P.SECTIONS.filter((sec) => sec.id !== 'hexad') : P.SECTIONS;
+  }
+
   function visibleItems(section) {
     const P = items();
     return section.items.filter((it) => P.isVisible(it, draft.answers));
@@ -274,7 +293,7 @@
 
   function renderPage(sec) {
     const P = items();
-    const sections = P.SECTIONS;
+    const sections = activeSections();
     if (draft.page >= sections.length) draft.page = sections.length - 1;
     const section = sections[draft.page];
     const before = sections.slice(0, draft.page).reduce((n, s) => n + visibleItems(s).length, 0);
@@ -339,12 +358,18 @@
     const P = items();
     const { pid, group } = participant();
     const answers = {};
+    const onbHex = onboardingHexAnswers();
+    const asked = new Set(activeSections().flatMap((sec) => sec.items.map((it) => it.id)));
     P.ALL_ITEMS.forEach((it) => {
-      if (!P.isVisible(it, draft.answers)) return;
+      if (!asked.has(it.id) || !P.isVisible(it, draft.answers)) return;
       const v = draft.answers[it.id];
       if (v === undefined || v === null || String(v).trim() === '') return;
       answers[it.id] = it.type === 'likert5' || it.type === 'likert7' ? Number(v) : String(v).trim();
     });
+    // アンケート群：最初の診断で答えたHexad-12を、事後アンケートのHEX01〜12として使う
+    if (onbHex) {
+      P.ALL_ITEMS.filter((it) => it.scale === 'HEX').forEach((it) => { answers[it.id] = Number(onbHex[it.id]); });
+    }
     const st = (typeof appState !== 'undefined' && appState) ? appState : {};
     mark('surveySubmit', { overwrite: true });
     return {
@@ -353,10 +378,11 @@
       condition: CONDITION_LABELS[group] || null,
       itemsVersion: ITEMS_VERSION,
       answers,
+      hexSource: onbHex ? 'onboarding' : 'post_survey',
       events: getEvents(),
       hexadResult: st.hexadResult || load(KEYS.hexadResult, null),
       classifyMethod: st.classifyMethod || (group === 'C' ? 'none' : null),
-      onboardingAnswers: st.answers && Object.keys(st.answers).length ? st.answers : null,
+      onboardingAnswers: load(KEYS.onboardingAnswers, null) || (st.answers && Object.keys(st.answers).length ? st.answers : null),
       chatTranscript: load(KEYS.chat, null),
       playLog: (load(KEYS.log, []) || []).slice(-100),
       client: {

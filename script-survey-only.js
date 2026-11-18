@@ -919,33 +919,42 @@ function initWelcomeScreen() {
 }
 
 /* ============================================================
-   1. アンケート画面（12問・5段階評価）
+   1. アンケート画面（Hexad-12・12問・7段階評価）
+   本実験では、アンケート群の診断に正規の尺度（Hexad-12の日本語訳）を使う。
+   設問文は事後アンケートと共通（post-survey-items.js）。ここでの回答は、事後アンケートの
+   Hexad-12の回答としてそのまま使うため、アンケート群は事後アンケートで同じ質問に答えない。
    ============================================================ */
+
+const ONBOARD_ITEMS = PostSurveyItems.ALL_ITEMS
+  .filter((it) => it.scale === 'HEX')
+  .map((it) => ({ id: it.id, type: it.hexadType, text: it.text }));
 
 function renderSurveyForm() {
   const formEl = $('#survey-form');
   appState.answers = {};
+  const ends = PostSurveyItems.LIKERT7_ENDS;
 
-  formEl.innerHTML = SURVEY_ITEMS.map((item) => `
+  formEl.innerHTML = ONBOARD_ITEMS.map((item, idx) => `
     <div class="survey-item" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid #e0e0e0;">
       <p style="margin: 0 0 0.75rem; font-weight: 500; line-height: 1.5;">
-        <span style="color: var(--theme-color, #2a78d6); font-weight: 700; margin-right: 0.5rem;">Q${item.id}.</span>${escapeHtml(item.text)}
+        <span style="color: var(--theme-color, #2a78d6); font-weight: 700; margin-right: 0.5rem;">Q${idx + 1}.</span>${escapeHtml(item.text)}
       </p>
-      <div class="likert-group" data-qid="${item.id}" style="display: flex; gap: 6px; flex-wrap: wrap;">
-        ${LIKERT_LABELS.map((lbl, i) => `
+      <div class="likert-group" data-qid="${item.id}" style="display: flex; gap: 6px;">
+        ${[1, 2, 3, 4, 5, 6, 7].map((n) => `
           <button type="button"
             class="likert-btn"
-            data-value="${i + 1}"
-            style="flex: 1; min-width: 60px; padding: 8px 4px; border: 2px solid var(--baseline); border-radius: 6px; background: var(--surface-1); cursor: pointer; font-size: 0.75rem; line-height: 1.3; white-space: pre-line; transition: all 0.15s;"
-          >${lbl}</button>
+            data-value="${n}"
+            style="flex: 1; min-width: 0; padding: 10px 0; border: 2px solid var(--baseline); border-radius: 6px; background: var(--surface-1); cursor: pointer; font-size: 0.9rem; transition: all 0.15s;"
+          >${n}</button>
         `).join('')}
       </div>
+      <div class="likert7-ends"><span>1＝${escapeHtml(ends[0])}</span><span>7＝${escapeHtml(ends[1])}</span></div>
     </div>
   `).join('');
 
   // リッカートボタンのイベント
   formEl.querySelectorAll('.likert-group').forEach((group) => {
-    const qid = Number(group.dataset.qid);
+    const qid = group.dataset.qid;
     group.querySelectorAll('.likert-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         group.querySelectorAll('.likert-btn').forEach((b) => {
@@ -967,7 +976,7 @@ function renderSurveyForm() {
 function checkSurveyComplete() {
   const answered = Object.keys(appState.answers).length;
   const submitBtn = $('#btn-survey-submit');
-  if (answered >= SURVEY_ITEMS.length) {
+  if (answered >= ONBOARD_ITEMS.length) {
     submitBtn.disabled = false;
     submitBtn.style.opacity = '1';
   } else {
@@ -987,43 +996,35 @@ $('#btn-survey-submit').addEventListener('click', () => {
   }, 800);
 });
 
-/* スコアベース判定（ルールベース） */
+/* スコアベース判定（ルールベース）
+   Hexad-12：タイプごとに2項目の平均（1〜7）を求め、0〜100に換算する。
+   最高得点が同点のときは、特定のタイプに偏らないよう、同点のタイプからランダムに1つ選ぶ。 */
 function classifyByScore(answers) {
-  const scores = {};
-  for (const type of HEXAD_ORDER) {
-    scores[type] = 0;
-  }
-
-  for (const item of SURVEY_ITEMS) {
-    const val = answers[item.id] || 3;
-    // 1〜5点をそのまま0〜100点にスケール
-    scores[item.type] += val;
-  }
-
-  // タイプごとの設問数で平均化し、0〜100に正規化
+  const sums = {};
   const counts = {};
-  for (const type of HEXAD_ORDER) counts[type] = 0;
-  for (const item of SURVEY_ITEMS) counts[item.type]++;
+  for (const type of HEXAD_ORDER) { sums[type] = 0; counts[type] = 0; }
+  for (const item of ONBOARD_ITEMS) {
+    const val = Number(answers[item.id]) || 4;
+    sums[item.type] += val;
+    counts[item.type]++;
+  }
 
+  const means = {};
   const normalized = {};
   for (const type of HEXAD_ORDER) {
-    const avg = scores[type] / counts[type]; // 1〜5
-    normalized[type] = Math.round((avg - 1) / 4 * 100);
+    means[type] = counts[type] ? sums[type] / counts[type] : 4; // 1〜7
+    normalized[type] = Math.round((means[type] - 1) / 6 * 100);
   }
 
-  // 最高スコアのタイプを判定
-  let primaryType = HEXAD_ORDER[0];
-  let maxScore = -1;
-  for (const type of HEXAD_ORDER) {
-    if (normalized[type] > maxScore) {
-      maxScore = normalized[type];
-      primaryType = type;
-    }
-  }
+  const maxMean = Math.max(...HEXAD_ORDER.map((t) => means[t]));
+  const tied = HEXAD_ORDER.filter((t) => means[t] === maxMean);
+  const primaryType = tied[Math.floor(Math.random() * tied.length)];
 
   return {
     primaryType,
     scores: normalized,
+    means,
+    tiedTypes: tied.length > 1 ? tied : null,
     rationale: `アンケート結果から「${HEXAD_TYPES[primaryType].label}」タイプが最も強く現れました。`,
     method: 'survey',
   };
