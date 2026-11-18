@@ -317,16 +317,19 @@
       pw.html + descTable(series, fsec), statusFromP(t, p));
   }
 
-  function buildSections(rows) {
+  function buildSections(all) {
     const pairs3 = [['A', 'B'], ['A', 'C'], ['B', 'C']];
+    // 診断をやり直した人は、アンケートの回答がやり直し後になるため、アンケート・自由継続の分析から除く。
+    // 開始前の時間・診断の時間・推定の精度（最初の診断と本人のHexad-12）は、やり直す前のデータなので含める。
+    const rows = all.filter((r) => Number(r.rediagnosed) !== 1);
     const sections = [];
 
     sections.push({ id: 'h1', title: '仮説1 開始前の負担', cards: [
       likertCard('onb', rows, 'ONB', 'ONB 開始前の負担（4項目平均、低いほど負担が軽い）', '開始前の負担', pairs3, true, ['A', 'B'],
         '主な比較は「AI対話 × アンケート」です。診断なし群は手続きがほぼないので参考値です。'),
-      secCard('prestart', rows, 'prestart_sec', ['A', 'B', 'C'], '開始前の時間（番号入力 → 初めてのプレイ開始まで）', '開始前の時間', true,
+      secCard('prestart', all, 'prestart_sec', ['A', 'B', 'C'], '開始前の時間（番号入力 → 初めてのプレイ開始まで）', '開始前の時間', true,
         'アンケートの主観に頼らない、客観的な負担の指標です。'),
-      secCard('diag', rows, 'diagnosis_sec', ['A', 'B'], '診断にかかった時間（診断開始 → 練習の準備へ）', '診断にかかった時間', true),
+      secCard('diag', all, 'diagnosis_sec', ['A', 'B'], '診断にかかった時間（診断開始 → 練習の準備へ）', '診断にかかった時間', true),
       likertCard('s1', rows, 'S1', 'S1 開始前の過程そのものを楽しめた（1〜5）', '開始前の楽しさ', pairs3, false, ['A', 'B'], '補足の1項目です。'),
     ] });
 
@@ -334,7 +337,7 @@
     const accCards = [];
     {
       const groupItems = (g, key, chance, label) => {
-        const v = rows.filter((r) => r.group === g).map((r) => r[key]).filter((x) => x === 0 || x === 1);
+        const v = all.filter((r) => r.group === g).map((r) => r[key]).filter((x) => x === 0 || x === 1);
         const k = v.filter((x) => x === 1).length;
         return { group: g, label, n: v.length, k, rate: v.length ? k / v.length : 0, chance };
       };
@@ -357,8 +360,8 @@
         items[0].n ? (t1 < 0.05 ? 'sig' : 'ns') : 'wait'));
     }
     {
-      const rho = vals(rows.filter((r) => r.group === 'A'), 'spearman');
-      const mae = vals(rows.filter((r) => r.group === 'A'), 'ai_item_mae');
+      const rho = vals(all.filter((r) => r.group === 'A'), 'spearman');
+      const mae = vals(all.filter((r) => r.group === 'A'), 'ai_item_mae');
       const pos = rho.filter((v) => v > 0).length, nz = rho.filter((v) => v !== 0).length;
       const pSign = nz ? binomGreater(pos, nz, 0.5) : null;
       const lead = rho.length
@@ -428,7 +431,7 @@
     if (!tabs.some((t) => t.id === activeSub)) activeSub = 'summary';
 
     const summary = `<p class="hint">対象：アンケートまで回答した ${rows.length} 人（AI対話 ${n.A}・アンケート ${n.B}・診断なし ${n.C}）。テストの番号（900以上）は除いています。項目を押すと、そのグラフに移動します。</p>` +
-      (() => { const re = rows.filter((r) => Number(r.rediagnosed) === 1); return re.length ? `<p class="hint">診断をやり直した人：${re.length} 人（うちタイプが変わった人 ${re.filter((r) => Number(r.type_changed) === 1).length} 人）。タイプの一致率などは<strong>最初の診断</strong>で集計しています。</p>` : ''; })() +
+      (() => { const re = rows.filter((r) => Number(r.rediagnosed) === 1); return re.length ? `<p class="hint">診断をやり直した人：${re.length} 人。この人たちは、アンケートの回答と自由継続の時間を分析から除いています（回答がやり直し後になるため）。開始前の時間・診断の時間・推定の精度は、やり直す前のデータなので含めています。</p>` : ''; })() +
       sections.map((s) => `<h3 class="sum-head">${esc(s.title)}</h3><ul class="sum-list">${s.cards.map((c) => `<li><button type="button" class="sum-item" data-go="${s.id}" data-card="${c.id}">${BADGE[c.status] || ''}<span class="sum-title">${esc(c.title)}</span>${c.lead ? `<span class="sum-lead">${c.lead}</span>` : ''}</button></li>`).join('')}</ul>`).join('');
 
     const method = `<div class="analysis"><p>各群10人程度の小さな標本なので、p値だけでなく効果量とグラフの点の散らばりを合わせて見てください。</p><ul class="method-list">

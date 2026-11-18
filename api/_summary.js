@@ -65,19 +65,34 @@ async function summaryRows() {
     ORDER BY created_at
   `)).rows;
   // プレイ記録は参加IDごとに集計する（参加IDがない古い記録は参加者番号で集計）
-  const play = (await query(`
-    SELECT COALESCE(entry_id, 'pid:' || participant_id) AS play_key,
-      COUNT(*) AS n_sessions,
-      SUM(elapsed_sec) AS total_play_sec,
-      AVG(cpm) AS mean_cpm, MAX(cpm) AS max_cpm,
-      AVG(accuracy) AS mean_accuracy,
-      SUM(correct_keystrokes) AS total_correct_keystrokes,
-      SUM(mistakes) AS total_mistakes
+  // 診断をやり直した人は、やり直し後のプレイを含めないので、1回ずつ取り出してから集計する
+  const sessions = (await query(`
+    SELECT COALESCE(entry_id, 'pid:' || participant_id) AS play_key, created_at,
+      elapsed_sec, cpm, accuracy, correct_keystrokes, mistakes
     FROM typing_sessions
     WHERE participant_id IS NOT NULL OR entry_id IS NOT NULL
-    GROUP BY COALESCE(entry_id, 'pid:' || participant_id)
   `)).rows;
-  const playByKey = new Map(play.map((p) => [String(p.play_key), p]));
+  const sessionsByKey = new Map();
+  sessions.forEach((r) => {
+    const k = String(r.play_key);
+    if (!sessionsByKey.has(k)) sessionsByKey.set(k, []);
+    sessionsByKey.get(k).push(r);
+  });
+  const num = (x) => (x == null || x === '' ? null : Number(x));
+  const aggPlay = (list, cutoff) => {
+    const cut = cutoff ? new Date(cutoff).getTime() : null;
+    const xs = (list || []).filter((r) => !cut || new Date(r.created_at).getTime() <= cut);
+    if (!xs.length) return {};
+    const sum = (k) => xs.reduce((a, r) => a + (num(r[k]) || 0), 0);
+    const avg = (k) => { const v = xs.map((r) => num(r[k])).filter((v) => v != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const cpms = xs.map((r) => num(r.cpm)).filter((v) => v != null);
+    return {
+      n_sessions: xs.length, total_play_sec: sum('elapsed_sec'),
+      mean_cpm: avg('cpm'), max_cpm: cpms.length ? Math.max(...cpms) : null,
+      mean_accuracy: avg('accuracy'),
+      total_correct_keystrokes: sum('correct_keystrokes'), total_mistakes: sum('mistakes'),
+    };
+  };
   const pidCount = new Map();
   surveys.forEach((s) => { const k = String(s.participant_id); pidCount.set(k, (pidCount.get(k) || 0) + 1); });
 
@@ -116,6 +131,9 @@ async function summaryRows() {
     row.rediagnosed = hist.length > 0 ? 1 : 0;
     row.final_type = finalHr && finalHr.primaryType ? finalHr.primaryType : '';
     row.type_changed = hist.length > 0 && hr && finalHr ? (hr.primaryType !== finalHr.primaryType ? 1 : 0) : '';
+    // やり直した時刻。これより後のプレイ記録は集計に含めない。アンケートの回答もやり直し後なので、満足度などの分析からは除く（rediagnosed=1 で絞る）
+    const cutoff = hist[0] && hist[0].archivedAt ? hist[0].archivedAt : null;
+    row.rediagnosed_at = cutoff || '';
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
     row.classify_method = (hr && hr.method) || p.classifyMethod || null; // llm_items＝AIが12項目を推定（3回平均）、survey＝Hexad-12に回答
@@ -151,13 +169,16 @@ async function summaryRows() {
     EVENT_COLS.forEach((k) => { row[`t_${k}`] = ev[k] || ''; });
     row.prestart_sec = secBetween(ev.entry, ev.firstGameStart);        // 番号入力 → 初回スタート（全群共通の開始前時間）
     row.diagnosis_sec = secBetween(ev.onboardingStart, ev.onboardingEnd); // 診断の開始 → 練習の準備へ（A・B群）
-    row.play_window_sec = secBetween(ev.firstGameStart, ev.surveyStart);  // 初回スタート → アンケート開始
-    row.free_play_sec = ev.freeChoiceShown ? secBetween(ev.freeChoiceShown, ev.surveyStart) : ''; // 選べるようになってから遊んだ時間
+    // やり直した人は、やり直した時点で打ち切る（それ以降は分析に含めない）
+    const playEnd = cutoff && ev.surveyStart && cutoff < ev.surveyStart ? cutoff : ev.surveyStart;
+    row.play_window_sec = secBetween(ev.firstGameStart, playEnd);  // 初回スタート → アンケート開始
+    row.free_play_sec = ev.freeChoiceShown ? (cutoff && cutoff < ev.freeChoiceShown ? 0 : secBetween(ev.freeChoiceShown, playEnd)) : ''; // 選べるようになってから遊んだ時間
     COUNT_COLS.forEach((k) => { row[k] = ev[k] ?? 0; });
 
     // プレイ記録（DBの typing_sessions を参加者番号で集計）
     const eid = s.entry_id || p.entryId;
-    const pl = (eid && playByKey.get(String(eid))) || playByKey.get(`pid:${s.participant_id}`) || {};
+    const plList = (eid && sessionsByKey.get(String(eid))) || sessionsByKey.get(`pid:${s.participant_id}`) || [];
+    const pl = aggPlay(plList, cutoff); // やり直した人は、やり直すまでのプレイだけ
     row.n_sessions = pl.n_sessions ?? '';
     row.total_play_sec = pl.total_play_sec != null ? Math.round(Number(pl.total_play_sec) * 10) / 10 : '';
     row.mean_cpm = pl.mean_cpm != null ? Math.round(Number(pl.mean_cpm) * 10) / 10 : '';
