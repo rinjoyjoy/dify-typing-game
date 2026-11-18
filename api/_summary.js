@@ -5,7 +5,7 @@ const PostSurvey = require('../post-survey-items.js');
 
 const HEXAD_ORDER = ['achiever', 'player', 'socialiser', 'freeSpirit', 'philanthropist', 'disruptor'];
 const EVENT_COLS = ['entry', 'onboardingStart', 'onboardingEnd', 'firstGameStart', 'freeChoiceShown', 'surveyStart', 'surveySubmit'];
-const COUNT_COLS = ['n_games_started', 'n_free_continue', 'n_clear', 'n_fail', 'n_rediagnose_clicked', 'n_resumes'];
+const COUNT_COLS = ['n_games_started', 'n_free_continue', 'n_clear', 'n_fail', 'n_rediagnose_clicked', 'n_rediagnose_done', 'n_resumes'];
 
 function safeEqual(a, b) {
   const ba = Buffer.from(String(a));
@@ -108,7 +108,14 @@ async function summaryRows() {
     });
 
     // 割り当てられたタイプ（診断なし群は達成者で固定）と、本人のHexad-12との一致
-    const hr = p.hexadResult || null;
+    // 診断をやり直した人は、最初の診断を分析に使う（やり直し後の結果は final_type に残す）
+    const hist = Array.isArray(p.diagnosisHistory) ? p.diagnosisHistory : [];
+    const finalHr = p.hexadResult || null;
+    const hr = (hist[0] && hist[0].hexadResult) || finalHr;
+    row.n_diagnoses = s.participant_group === 'C' ? 0 : hist.length + (finalHr ? 1 : 0);
+    row.rediagnosed = hist.length > 0 ? 1 : 0;
+    row.final_type = finalHr && finalHr.primaryType ? finalHr.primaryType : '';
+    row.type_changed = hist.length > 0 && hr && finalHr ? (hr.primaryType !== finalHr.primaryType ? 1 : 0) : '';
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
     row.classify_method = (hr && hr.method) || p.classifyMethod || null; // llm_items＝AIが12項目を推定（3回平均）、survey＝Hexad-12に回答
@@ -163,7 +170,9 @@ async function summaryRows() {
     row.viewport = c.viewport || '';
     row.max_touch_points = c.maxTouchPoints ?? '';
     row.user_agent = c.userAgent || '';
-    row.chat_turns = Array.isArray(p.chatTranscript) ? p.chatTranscript.filter((l) => l.role === 'user').length : '';
+    const firstChat = hist[0] && Array.isArray(hist[0].chatTranscript) ? hist[0].chatTranscript : p.chatTranscript;
+    row.chat_turns = Array.isArray(firstChat) ? firstChat.filter((l) => l.role === 'user').length : '';
+    row.chat_turns_final = Array.isArray(p.chatTranscript) ? p.chatTranscript.filter((l) => l.role === 'user').length : '';
     return row;
   });
 

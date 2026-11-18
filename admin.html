@@ -371,7 +371,7 @@
             <td class="num">${esc(r.participant_id)}</td><td>${esc(r.condition)}</td><td>${status}${dup}${test}</td>
             <td class="num">${fmtNum(r.n_sessions, 0)}</td><td class="num">${fmtSec(r.total_play_sec)}</td>
             <td class="num">${r.kind === 'responded' ? fmtSec(r.prestart_sec) : '—'}</td>
-            <td>${r.assigned_type ? TYPE_JA[r.assigned_type] || r.assigned_type : '—'}</td><td>${typeList(r.hex_top_types)}</td><td style="text-align:center;">${match}</td>
+            <td>${r.assigned_type ? TYPE_JA[r.assigned_type] || r.assigned_type : '—'}${Number(r.rediagnosed) === 1 ? `<br><span class="hint">やり直し後：${TYPE_JA[r.final_type] || r.final_type || '—'}</span>` : ''}</td><td>${typeList(r.hex_top_types)}</td><td style="text-align:center;">${match}</td>
             <td>${fmtTime(r.kind === 'responded' ? r.submitted_at : r.last_at)}</td>
             <td>${r.kind === 'responded' ? `<button class="btn-sm" data-detail="${r.response_id}">詳細</button> ` : ''}<button class="btn-sm danger" data-del="${i}">削除</button></td></tr>`;
         });

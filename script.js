@@ -1425,6 +1425,7 @@ function triggerRediagnose() {
   if (confirm('現在の診断結果をリセットし、もう一度チャット診断からやり直しますか？\n（これまでのコインや自己ベストなどの記録は消えずに残ります。画面に表示される内容は、新しいタイプに合わせて変わります）')) {
     // 記録（stats）は消さない。やり直し前のタイプを覚えておき、結果画面で「記録は残っている」ことを伝える
     const prevType = appState.hexadResult ? appState.hexadResult.primaryType : null;
+    if (window.StudyFlow && StudyFlow.archiveDiagnosis) StudyFlow.archiveDiagnosis(); // やり直す前の診断を研究データ用に残す
     localStorage.removeItem(STORAGE_KEYS.hexadResult);
     appState.hexadResult = null;
     const s = getStats(); s.fullTimeStreak = 0; s.rediagnosePromptShown = false; s.typeBeforeRediagnose = prevType; saveStats(s);

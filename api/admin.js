@@ -46,6 +46,7 @@ async function overview() {
     free_play_sec: r.free_play_sec,
     n_resumes: r.n_resumes,
     assigned_type: r.assigned_type,
+    rediagnosed: r.rediagnosed, final_type: r.final_type, type_changed: r.type_changed,
     hex_top_types: r.hex_top_types,
     assigned_is_top: r.assigned_is_top,
     assigned_in_top2: r.assigned_in_top2,

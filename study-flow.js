@@ -22,6 +22,7 @@
     participant: 'gtp_participant_meta',
     log: 'gtp_log',
     hexadResult: 'gtp_hexad_result',
+    diagHistory: 'gtp_diag_history', // 診断をやり直したとき、やり直す前の診断（結果・会話・回答）を残す
     entryId: 'gtp_entry_id',
   };
   const CONDITION_LABELS = { A: 'AI対話', B: 'アンケート', C: '診断なし' };
@@ -392,6 +393,7 @@
       classifyMethod: st.classifyMethod || (group === 'C' ? 'none' : null),
       onboardingAnswers: load(KEYS.onboardingAnswers, null) || (st.answers && Object.keys(st.answers).length ? st.answers : null),
       chatTranscript: load(KEYS.chat, null),
+      diagnosisHistory: load(KEYS.diagHistory, []) || [], // やり直す前の診断（古い順）。空なら1回だけ診断
       playLog: (load(KEYS.log, []) || []).slice(-100),
       client: {
         userAgent: navigator.userAgent,
@@ -475,6 +477,24 @@
     try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
     return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   }
+  // 診断のやり直しを確定したときに呼ぶ：今の診断を履歴に移してから消す（研究データでは最初の診断を主に使う）
+  function archiveDiagnosis() {
+    snapshotChat();
+    const st = (typeof appState !== 'undefined' && appState) ? appState : {};
+    const hist = load(KEYS.diagHistory, []) || [];
+    hist.push({
+      archivedAt: new Date().toISOString(),
+      hexadResult: st.hexadResult || load(KEYS.hexadResult, null),
+      classifyMethod: st.classifyMethod || null,
+      chatTranscript: load(KEYS.chat, null),
+      answers: st.answers && Object.keys(st.answers).length ? { ...st.answers } : null,
+      gamesBefore: Number(getEvents().n_games_started) || 0,
+    });
+    save(KEYS.diagHistory, hist);
+    bump('n_rediagnose_done');
+    try { localStorage.removeItem(KEYS.chat); } catch (e) {}
+  }
+
   function resetForNewParticipant() {
     try {
       Object.keys(localStorage)
@@ -519,6 +539,6 @@
     REQUIRED_PLAY_MS, MAX_PLAY_MS,
     mark, bump, getEvents, playState,
     updatePostgame, openSurvey,
-    recordClear, easeFactor,
+    recordClear, easeFactor, archiveDiagnosis,
   };
 })();

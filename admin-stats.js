@@ -428,6 +428,7 @@
     if (!tabs.some((t) => t.id === activeSub)) activeSub = 'summary';
 
     const summary = `<p class="hint">対象：アンケートまで回答した ${rows.length} 人（AI対話 ${n.A}・アンケート ${n.B}・診断なし ${n.C}）。テストの番号（900以上）は除いています。項目を押すと、そのグラフに移動します。</p>` +
+      (() => { const re = rows.filter((r) => Number(r.rediagnosed) === 1); return re.length ? `<p class="hint">診断をやり直した人：${re.length} 人（うちタイプが変わった人 ${re.filter((r) => Number(r.type_changed) === 1).length} 人）。タイプの一致率などは<strong>最初の診断</strong>で集計しています。</p>` : ''; })() +
       sections.map((s) => `<h3 class="sum-head">${esc(s.title)}</h3><ul class="sum-list">${s.cards.map((c) => `<li><button type="button" class="sum-item" data-go="${s.id}" data-card="${c.id}">${BADGE[c.status] || ''}<span class="sum-title">${esc(c.title)}</span>${c.lead ? `<span class="sum-lead">${c.lead}</span>` : ''}</button></li>`).join('')}</ul>`).join('');
 
     const method = `<div class="analysis"><p>各群10人程度の小さな標本なので、p値だけでなく効果量とグラフの点の散らばりを合わせて見てください。</p><ul class="method-list">
