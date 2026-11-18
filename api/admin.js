@@ -53,6 +53,8 @@ async function overview() {
     ai_item_mae: r.ai_item_mae,
     ONB: r.ONB_mean, FIT: r.FIT_mean, ENJ: r.ENJ_mean, RET: r.RET_mean, RED: r.RED_mean,
     chat_turns: r.chat_turns,
+    S1: r.S1, S2: r.S2, S3: r.S3, S4: r.S4, EXP: r.EXP, CMP1: r.CMP1,
+    n_free_continue: r.n_free_continue, n_games_started: r.n_games_started,
   }));
 
   // プレイ記録はあるがアンケートが届いていない参加（途中でやめた・回答中）

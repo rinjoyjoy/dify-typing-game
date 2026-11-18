@@ -58,6 +58,34 @@
     .chat div { padding: 6px 10px; border-radius: 8px; max-width: 85%; white-space: pre-wrap; }
     .chat .ai { background: var(--page); align-self: flex-start; }
     .chat .user { background: color-mix(in srgb, var(--text-primary) 10%, transparent); align-self: flex-end; }
+    /* 統計分析のグラフ。群の色は、検証済みの3色（青・オレンジ・アクア）を固定で割り当てる */
+    .stats-root { --g-A: #2a78d6; --g-B: #eb6834; --g-C: #1baf7a; }
+    @media (prefers-color-scheme: dark) { .stats-root { --g-A: #3987e5; --g-B: #d95926; --g-C: #199e70; } }
+    .analysis-group { font-size: 1.05rem; margin: 26px 0 10px; padding-left: 10px; border-left: 4px solid var(--text-primary); }
+    .analysis { border: 1px solid var(--gridline); border-radius: 10px; padding: 14px 16px 16px; margin: 12px 0; background: var(--surface-1); }
+    .analysis h3 { margin: 0 0 6px; font-size: 1rem; }
+    .analysis .finding { margin: 0 0 10px; font-size: 0.9rem; line-height: 1.7; }
+    .analysis .stat-line { font-size: 0.85rem; margin: 8px 0; font-family: "JetBrains Mono", Consolas, monospace; }
+    .analysis .tbl.stat { margin-top: 8px; border: 1px solid var(--gridline); border-radius: 6px; }
+    .analysis .hint { margin: 8px 0 0; }
+    .viz { width: 100%; max-width: 760px; height: auto; display: block; margin: 4px 0; }
+    .viz .grid { stroke: var(--gridline); stroke-width: 1; }
+    .viz .row { stroke: var(--gridline); stroke-width: 1; }
+    .viz .tick { fill: var(--text-muted); font-size: 11px; }
+    .viz .rowlabel { fill: var(--text-primary); font-size: 13px; font-weight: 600; }
+    .viz .vlabel { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+    .viz .muted, .viz tspan.muted { fill: var(--text-muted); font-weight: 400; }
+    .viz .dot { stroke: var(--surface-1); stroke-width: 2; }
+    .viz .dot:hover { stroke: var(--text-primary); }
+    .viz .median { stroke: var(--text-primary); stroke-width: 2.5; stroke-linecap: round; }
+    .viz .chance { stroke: var(--text-primary); stroke-width: 2; stroke-linecap: round; }
+    .viz .g-A, .sw.g-A { fill: var(--g-A); background: var(--g-A); }
+    .viz .g-B, .sw.g-B { fill: var(--g-B); background: var(--g-B); }
+    .viz .g-C, .sw.g-C { fill: var(--g-C); background: var(--g-C); }
+    .viz-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--text-secondary); margin: 2px 0 2px; }
+    .viz-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .viz-legend .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .viz-legend .sw-median, .viz-legend .sw-chance { width: 2.5px; height: 14px; background: var(--text-primary); display: inline-block; border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -95,6 +123,12 @@
             <h2>群ごとの集計（速報）</h2>
             <p class="hint">回答済みの人の平均です（テストの900番台を除く）。尺度は5段階の平均。正式な分析はCSVで行ってください。</p>
             <div class="tbl-wrap"><table class="tbl" id="group-table"></table></div>
+          </div>
+
+          <!-- 統計分析 -->
+          <div class="admin-section stats-root">
+            <h2>統計分析（グラフつき）</h2>
+            <div id="analysis"></div>
           </div>
 
           <!-- 参加者一覧 -->
@@ -162,6 +196,7 @@
   </dialog>
 
   <script src="post-survey-items.js"></script>
+  <script src="admin-stats.js"></script>
   <script>
     (function () {
       const $ = (s) => document.querySelector(s);
@@ -223,7 +258,10 @@
         $('#dl-raw').href = `/api/export?key=${k}&type=raw`;
       }
 
-      function renderAll() { renderKpis(); renderGroups(); renderPeople(); }
+      function renderAll() {
+        renderKpis(); renderGroups(); renderPeople();
+        if (window.AdminStats) AdminStats.render($('#analysis'), data.responded.filter((r) => !isTest(r)));
+      }
 
       function renderKpis() {
         const target = Math.max(1, Number($('#target').value) || 10);
