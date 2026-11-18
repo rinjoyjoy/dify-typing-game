@@ -11,7 +11,7 @@
   }
 })(typeof self !== 'undefined' ? self : this, function () {
   const LIKERT5 = ['全くあてはまらない', 'あまりあてはまらない', 'どちらともいえない', 'ややあてはまる', 'とてもあてはまる'];
-  const LIKERT7_ENDS = ['全くあてはまらない', 'とてもあてはまる'];
+  const LIKERT7_ENDS = ['まったくそう思わない', 'とてもそう思う']; // Hexad-12原典の strongly disagree〜strongly agree
 
   // 条件付きで表示する設問の判定（EXP＝タイピングゲーム経験の有無）
   const IF_EXPERIENCED = { item: 'EXP', equals: 'yes' };
@@ -92,22 +92,28 @@
     {
       id: 'hexad',
       title: 'あなた自身について',
-      lead: 'ゲームに限らず、ふだんのあなたにどのくらいあてはまるかを7段階で答えてください。',
-      // Hexad-12（Krath et al., 2023）。予備実験で使用した日本語訳・項目順をそのまま使う。
-      // hexadType は集計時のタイプ別平均（2項目ずつ）に使う。
+      lead: 'ゲームに限らず、ふだんのあなた自身について、それぞれの文にどのくらいそう思うかを7段階で答えてください。',
+      // Hexad-12（Krath et al., 2023, CHI '23, Table 5）を日本語に訳したもの（研究者訳）。
+      // 原文：P1 It makes me happy if I am able to help others. / P4 The well-being of others is important to me.
+      //       S2 I like being part of a team. / S4 I enjoy group activities.
+      //       F1 It is important to me to follow my own path. / F3 Being independent is important to me.
+      //       A2 I like mastering difficult tasks. / A4 I enjoy emerging victorious out of difficult circumstances.
+      //       R4 If the reward is sufficient, I will put in the effort. / R2 Rewards are a great way to motivate me.
+      //       D3 I see myself as a rebel. / D4 I dislike following rules.
+      // 回答は原典どおり7件法（strongly disagree〜strongly agree）。hexadType は集計時のタイプ別平均（2項目ずつ）に使う。
       items: [
-        { id: 'HEX01', scale: 'HEX', hexadType: 'philanthropist', type: 'likert7', text: '【要記入】慈善家 項目1' },
-        { id: 'HEX02', scale: 'HEX', hexadType: 'philanthropist', type: 'likert7', text: '【要記入】慈善家 項目2' },
-        { id: 'HEX03', scale: 'HEX', hexadType: 'socialiser', type: 'likert7', text: '【要記入】社交家 項目1' },
-        { id: 'HEX04', scale: 'HEX', hexadType: 'socialiser', type: 'likert7', text: '【要記入】社交家 項目2' },
-        { id: 'HEX05', scale: 'HEX', hexadType: 'freeSpirit', type: 'likert7', text: '【要記入】自由主義者 項目1' },
-        { id: 'HEX06', scale: 'HEX', hexadType: 'freeSpirit', type: 'likert7', text: '【要記入】自由主義者 項目2' },
-        { id: 'HEX07', scale: 'HEX', hexadType: 'achiever', type: 'likert7', text: '【要記入】達成者 項目1' },
-        { id: 'HEX08', scale: 'HEX', hexadType: 'achiever', type: 'likert7', text: '【要記入】達成者 項目2' },
-        { id: 'HEX09', scale: 'HEX', hexadType: 'player', type: 'likert7', text: '【要記入】プレイヤー 項目1' },
-        { id: 'HEX10', scale: 'HEX', hexadType: 'player', type: 'likert7', text: '【要記入】プレイヤー 項目2' },
-        { id: 'HEX11', scale: 'HEX', hexadType: 'disruptor', type: 'likert7', text: '【要記入】変革者 項目1' },
-        { id: 'HEX12', scale: 'HEX', hexadType: 'disruptor', type: 'likert7', text: '【要記入】変革者 項目2' },
+        { id: 'HEX01', scale: 'HEX', hexadType: 'philanthropist', type: 'likert7', text: 'ほかの人を助けることができると、うれしい' },
+        { id: 'HEX02', scale: 'HEX', hexadType: 'philanthropist', type: 'likert7', text: 'ほかの人が幸せであることは、自分にとって大切だ' },
+        { id: 'HEX03', scale: 'HEX', hexadType: 'socialiser', type: 'likert7', text: 'チームの一員であることが好きだ' },
+        { id: 'HEX04', scale: 'HEX', hexadType: 'socialiser', type: 'likert7', text: 'グループで活動することを楽しいと感じる' },
+        { id: 'HEX05', scale: 'HEX', hexadType: 'freeSpirit', type: 'likert7', text: '自分の道を進むことは、自分にとって大切だ' },
+        { id: 'HEX06', scale: 'HEX', hexadType: 'freeSpirit', type: 'likert7', text: '自立していることは、自分にとって大切だ' },
+        { id: 'HEX07', scale: 'HEX', hexadType: 'achiever', type: 'likert7', text: '難しい課題を極めるのが好きだ' },
+        { id: 'HEX08', scale: 'HEX', hexadType: 'achiever', type: 'likert7', text: '困難な状況を乗り越えて勝ち抜くことを楽しいと感じる' },
+        { id: 'HEX09', scale: 'HEX', hexadType: 'player', type: 'likert7', text: '報酬が十分なら、努力する' },
+        { id: 'HEX10', scale: 'HEX', hexadType: 'player', type: 'likert7', text: '報酬は、自分のやる気を高めるのにとても効果的だ' },
+        { id: 'HEX11', scale: 'HEX', hexadType: 'disruptor', type: 'likert7', text: '自分は反逆者タイプだと思う' },
+        { id: 'HEX12', scale: 'HEX', hexadType: 'disruptor', type: 'likert7', text: 'ルールに従うのは好きではない' },
       ],
     },
     {
