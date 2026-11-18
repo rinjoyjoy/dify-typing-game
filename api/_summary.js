@@ -132,8 +132,11 @@ async function summaryRows() {
     row.final_type = finalHr && finalHr.primaryType ? finalHr.primaryType : '';
     row.type_changed = hist.length > 0 && hr && finalHr ? (hr.primaryType !== finalHr.primaryType ? 1 : 0) : '';
     // やり直した時刻。これより後のプレイ記録は集計に含めない。アンケートの回答もやり直し後なので、満足度などの分析からは除く（rediagnosed=1 で絞る）
-    const cutoff = hist[0] && hist[0].archivedAt ? hist[0].archivedAt : null;
-    row.rediagnosed_at = cutoff || '';
+    const rediagAt = hist[0] && hist[0].archivedAt ? hist[0].archivedAt : null;
+    row.rediagnosed_at = rediagAt || '';
+    // アンケート送信後のプレイ（自由に遊んだ分・送信後の再診断）も含めない
+    const submittedAt = s.created_at ? new Date(s.created_at).toISOString() : null;
+    const cutoff = rediagAt && (!submittedAt || rediagAt < submittedAt) ? rediagAt : submittedAt;
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
     row.classify_method = (hr && hr.method) || p.classifyMethod || null; // llm_items＝AIが12項目を推定（3回平均）、survey＝Hexad-12に回答

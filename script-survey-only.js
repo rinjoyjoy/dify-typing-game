@@ -1093,7 +1093,8 @@ $('#btn-goto-setup').addEventListener('click', () => {
 // （「もう一度プレイ」を連打して設定画面に戻らないユーザーでも見逃さないように）。
 // 提案を無視してそのまま次のプレイを始めたら、提案は一旦消えてカウントをリセットする（毎回しつこく出さないように）。
 function buildRediagnosePromptHtml(stats, buttonId) {
-  const show = (stats.fullTimeStreak || 0) >= 3;
+  // 診断のやり直しは、アンケート送信後だけ提案する（実験中のデータに混ざらないように）
+  const show = !!(window.StudyFlow && StudyFlow.isSubmitted && StudyFlow.isSubmitted());
   if (!show) return '';
   if (!stats.rediagnosePromptShown) {
     stats.rediagnosePromptShown = true;
@@ -1101,7 +1102,7 @@ function buildRediagnosePromptHtml(stats, buttonId) {
   }
   return `
     <div class="setup-row rediagnose-prompt">
-      <p class="hint">3回、時間いっぱいプレイしました。今のあなたに合ったタイプか、診断をやり直してみませんか？</p>
+      <p class="hint">アンケートへのご協力ありがとうございました。別のタイプも試してみたい場合は、診断をやり直せます（記録は残ります）。</p>
       <button type="button" id="${buttonId}" class="btn btn-tertiary">${icon('refresh')}タイプ診断をやり直す</button>
     </div>
   `;

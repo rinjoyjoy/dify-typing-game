@@ -159,7 +159,8 @@
     if (!show) { p.style.display = 'none'; return; }
     const st = playState();
     let text = '';
-    if (st.phase === 'notStarted') text = 'プレイ時間の目安：約5分';
+    if (isSubmitted()) text = 'アンケート送信済み｜ここからは自由に遊べます';
+    else if (st.phase === 'notStarted') text = 'プレイ時間の目安：約5分';
     else if (st.phase === 'required') text = `アンケートまで あと ${fmtClock(st.remaining)}`;
     else if (st.phase === 'free') text = '必須のプレイ完了｜結果画面からアンケートに進めます';
     else text = 'プレイ時間終了｜結果画面からアンケートに進んでください';
@@ -195,6 +196,17 @@
     const ctaText = qs('.survey-cta-text', box); if (ctaText) ctaText.textContent = 'プレイおつかれさまでした。最後にアンケートにご協力ください。';
     if (goBtn) { goBtn.disabled = false; goBtn.lastChild.textContent = 'アンケートに進む'; }
 
+    // アンケート送信後：ここからのプレイは研究データに含めない（自由に遊べる）
+    if (isSubmitted()) {
+      box.style.display = 'none';
+      note.innerHTML = 'アンケートは送信済みです。ここからは自由に遊べます。<br><span class="hint">このページはいつ閉じてもかまいません。</span>';
+      again.textContent = 'もう一度プレイ';
+      again.className = 'btn btn-primary';
+      again.style.display = '';
+      if (back) back.style.display = '';
+      return;
+    }
+
     const st = playState();
     lastPhase = st.phase;
     if (st.phase === 'notStarted' || st.phase === 'required') {
@@ -226,6 +238,7 @@
   let draft = load(KEYS.draft, null) || { page: 0, answers: {} };
 
   function saveDraft() { save(KEYS.draft, draft); }
+  function isSubmitted() { return !!load(KEYS.submitted, null); }
   function items() { return window.PostSurveyItems; }
 
   function openSurvey() {
@@ -444,7 +457,9 @@
   }
 
   function renderDone(sec) {
-    const { pid } = participant();
+    const { pid, group } = participant();
+    // 診断のやり直しは、アンケート送信後だけ（AI対話群・アンケート群）
+    const canRediagnose = (group === 'A' || group === 'B') && typeof triggerRediagnose === 'function';
     sec.innerHTML = `
       <div class="card center ps-card">
         <h2>回答を送信しました</h2>
@@ -455,7 +470,17 @@
           <p>この研究では、ゲームを始める前の「タイプ診断」のやり方（AIとの対話・アンケート・診断なし）によって、ゲームの始めやすさや楽しさがどう変わるかを調べています。参加者によって、診断のやり方が異なります。</p>
           <p><strong>結果に影響するため、これから参加する人には、ゲームやアンケートの内容を話さないようお願いします。</strong></p>
         </div>
+        ${canRediagnose ? `<div class="ps-after">
+          <h3>別のタイプも試してみる（任意）</h3>
+          <p>診断をやり直すと、別のタイプに合わせた画面で遊べます。研究のデータはすでに送信済みなので、ここからは自由に試してください。コインや自己ベストなどの記録は残ります。</p>
+          <button type="button" id="btn-rediagnose-after" class="btn btn-secondary">タイプ診断をやり直す</button>
+        </div>` : ''}
       </div>`;
+    const rb = sec.querySelector('#btn-rediagnose-after');
+    if (rb) rb.addEventListener('click', () => {
+      surveyOpen = false;
+      triggerRediagnose(); // 各群のスクリプトの関数（確認ダイアログ → 診断画面へ）
+    });
   }
 
   // 前回、送信に失敗したまま閉じていた場合は、次に開いたときに自動で送り直す
@@ -539,6 +564,6 @@
     REQUIRED_PLAY_MS, MAX_PLAY_MS,
     mark, bump, getEvents, playState,
     updatePostgame, openSurvey,
-    recordClear, easeFactor, archiveDiagnosis,
+    recordClear, easeFactor, archiveDiagnosis, isSubmitted,
   };
 })();
