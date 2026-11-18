@@ -940,16 +940,20 @@ function initWelcomeScreen() {
 
 let conversationId = "";
 let isChatting = false;
+// 判定用の会話ログ（エラーメッセージは含めない）
+let chatLog = [];
 
 function renderSurvey() {
   $('#chat-messages').innerHTML = '';
   conversationId = "";
+  chatLog = [];
   appendChatMessage('ai', 'こんにちは！まずはあなたの好きなゲームのジャンルや、ゲームをプレイする目的（例：友達と遊ぶ、アイテムを集める、ストーリーを楽しむ、腕を磨く、自由に探検するなど）を教えてください！選択肢のない質問には、自由に文章で答えてもらってもかまいません。');
   $('#chat-input').value = '';
   $('#btn-chat-send').disabled = false;
 }
 
-function appendChatMessage(role, text) {
+function appendChatMessage(role, text, { log = true } = {}) {
+  if (log) chatLog.push({ role, text });
   const container = $('#chat-messages');
   const msgDiv = document.createElement('div');
   msgDiv.className = `chat-message ${role}`;
@@ -1067,78 +1071,163 @@ function getUserChatText() {
     .join('\n');
 }
 
+/* ============================================================
+   AI対話によるHexad判定（会話終了後）
+   - LLMには「この人がHexad-12の各項目に1〜7で答えたら何点か」を推定させる
+   - タイプのスコアは、LLMではなくこのコードで計算する（計算ミス・恣意的な差付けを防ぐ）
+   - JUDGE_RUNS回判定して項目ごとに平均し、判定のぶれを抑える
+   ============================================================ */
+const JUDGE_RUNS = 3;            // 判定の回数（API上限に当たる場合は1に下げる）
+const JUDGE_MAX_MESSAGE = 3900;  // api/chat.js の上限（4000文字）より少し小さく
+
+// 会話ログを「AI: 質問 / ユーザー: 回答」の形にまとめる。
+// AIの選択肢の行は省き（選ばれた選択肢はユーザーの発言として残る）、文字数上限に収める。
+function buildJudgeTranscript(maxLen) {
+  const lines = chatLog.map((m) => {
+    if (m.role === 'user') return `ユーザー: ${m.text}`;
+    const q = m.text.split('\n')
+      .filter((l) => !/^\s*\d+[\.\、]/.test(l))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return `AI: ${q}`;
+  });
+  let text = lines.join('\n');
+  if (text.length > maxLen) {
+    // 長すぎる場合はAIの発言を短く切り詰め、それでも超える場合は末尾を切る
+    text = chatLog.map((m, i) => (m.role === 'user' ? lines[i] : lines[i].slice(0, 80))).join('\n');
+    if (text.length > maxLen) text = text.slice(0, maxLen);
+  }
+  return text;
+}
+
+function buildJudgePrompt(transcript) {
+  const itemLines = SURVEY_ITEMS.map((it) => `${it.id}. [${it.type}] ${it.text}`).join('\n');
+  const itemsJson = SURVEY_ITEMS.map((it) => `"${it.id}":<1-7>`).join(',');
+  return `あなたはHexadゲーミフィケーションユーザータイプの診断者です。以下の会話から、ユーザーがアンケートに答えたらどう答えるかを推定してください。
+
+【推定する12の文】
+${itemLines}
+
+【手順とルール】
+1. 根拠はユーザーの発言（選んだ選択肢を含む）だけです。AIの質問文の語句は根拠にしません。
+2. 各文について、この人が1〜7のどれを選ぶか推定します（1=全く当てはまらない、4=どちらともいえない、7=とても当てはまる）。
+3. 手がかりがない文は4にします。「好き」「嬉しい」程度なら5〜6、強調や具体例があれば6〜7、否定や無関心なら1〜3。
+4. 「やり込み」は目的で区別します。報酬・収集・ランキングのため→player、上達・自己ベストのため→achiever、隠し要素や色々な遊び方のため→freeSpirit。
+5. 「競う」は、勝つこと・順位が目当てならplayer、相手との関わりが目当てならsocialiserです。
+6. 特定のタイプを無難な答えとして高くしたり、無理に差をつけたりしません。
+7. primaryTypeは最も当てはまるタイプ、rationaleは根拠となるユーザーの発言を引用して1〜2文。
+
+次のJSONだけを出力してください（前置き・コードブロック記号は不要）。
+{"items":{${itemsJson}},"primaryType":"<achiever|player|socialiser|freeSpirit|philanthropist|disruptor>","rationale":"<根拠>"}
+
+【会話】
+`;
+}
+
+// 1回分の判定。成功すれば { items: {1:..,...,12:..}, primaryType, rationale }、失敗なら null
+async function judgeOnce(message) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    console.warn('Judge request failed:', res.status);
+    return null;
+  }
+  const data = await res.json();
+  const answerText = data.answer || '';
+  const first = answerText.indexOf('{');
+  const last = answerText.lastIndexOf('}');
+  if (first === -1 || last <= first) {
+    console.warn('Judge format mismatch. Raw answer:', answerText);
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(answerText.substring(first, last + 1));
+  } catch (e) {
+    console.error('Judge JSON parse error:', e, answerText);
+    return null;
+  }
+  if (!parsed || typeof parsed.items !== 'object') return null;
+  const items = {};
+  for (const it of SURVEY_ITEMS) {
+    const v = Number(parsed.items[it.id] ?? parsed.items[String(it.id)]);
+    if (Number.isNaN(v)) return null;
+    items[it.id] = Math.max(1, Math.min(7, v));
+  }
+  return { items, primaryType: parsed.primaryType, rationale: parsed.rationale || '' };
+}
+
+// 複数回の判定結果を項目ごとに平均し、タイプのスコア（0〜100）とprimaryTypeを計算する
+function aggregateJudgements(runs) {
+  const items = {};
+  for (const it of SURVEY_ITEMS) {
+    items[it.id] = runs.reduce((sum, r) => sum + r.items[it.id], 0) / runs.length;
+  }
+  const scores = {};
+  for (const t of HEXAD_ORDER) {
+    const vals = SURVEY_ITEMS.filter((it) => it.type === t).map((it) => items[it.id]);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    scores[t] = Math.round(((avg - 1) / 6) * 100);
+  }
+  const maxScore = Math.max(...HEXAD_ORDER.map((t) => scores[t]));
+  const tied = HEXAD_ORDER.filter((t) => scores[t] === maxScore);
+  // 同点のときは、LLMがprimaryTypeとして挙げた回数が多いタイプを選ぶ
+  const votes = (t) => runs.filter((r) => String(r.primaryType).toLowerCase() === t.toLowerCase()).length;
+  let primaryType = tied[0];
+  for (const t of tied) if (votes(t) > votes(primaryType)) primaryType = t;
+
+  const picked = runs.find((r) => String(r.primaryType).toLowerCase() === primaryType.toLowerCase()) || runs[0];
+  const roundedItems = {};
+  for (const it of SURVEY_ITEMS) roundedItems[it.id] = Math.round(items[it.id] * 100) / 100;
+  return {
+    primaryType,
+    scores,
+    items: roundedItems,
+    rationale: picked.rationale,
+    method: 'llm',
+    judgeRuns: runs.length,
+  };
+}
+
 $('#btn-chat-finish').addEventListener('click', async () => {
   if (isChatting) return;
-  
+
   const btn = $('#btn-chat-finish');
   const originalText = btn.textContent;
-  
+
   showScreen('screen-analyzing');
-  
+
   try {
-    const userText = getUserChatText();
-    const chatText = $('#chat-messages').innerText || '';
-    const finalPrompt = `あなたはHexadゲーミフィケーションユーザータイプの診断者です。以下の会話から、ユーザーの動機づけのタイプを判定してください。
+    const head = buildJudgePrompt('');
+    const transcript = buildJudgeTranscript(JUDGE_MAX_MESSAGE - head.length);
+    const message = head + transcript;
 
-【6タイプの定義】
-- achiever（達成者）: 目標の達成・スキルの習熟・自分の上達そのものに満足感を得る。「上手くなりたい」「目標をクリアしたい」「苦手を克服したい」
-- player（プレイヤー）: 報酬が動機。ポイント・コイン・景品・ご褒美・ランキング上位・実績バッジ・レアアイテムの収集・勝つこと。「何かもらえるならやる」「ポイントが貯まると嬉しい」「集めたい」
-- socialiser（社交家）: 他者との交流・つながり・比較が動機。「友達と一緒に」「みんなの記録が気になる」「誰かと競いたい」
-- freeSpirit（自由人）: 自律・探索・自分のペースが動機。「自由に選びたい」「いろいろ試したい」「縛られたくない」
-- philanthropist（利他主義者）: 他者や社会への貢献が動機。「誰かの役に立ちたい」「人に教えたい」
-- disruptor（変革者）: 既存の枠組みを変えることが動機。「ルールを変えたい」「新しいやり方を試したい」「裏をかきたい」
-
-【判定ルール】
-1. 根拠にしてよいのは【ユーザーの発言】だけです。AIの質問文に含まれる語句（目標・達成など）は根拠にしないでください。
-2. achiever を初期値や無難な答えとして選ばないでください。上達・目標達成そのものへの言及が明確なときだけ高くします。
-3. 「報酬・ポイント・景品・ご褒美・ランキング・集める・勝つ」への関心が目立つ場合は player を優先します。「目標がある」というだけでは achiever にしません。
-4. scores は0〜100で、タイプ間にはっきり差をつけてください。primaryType は scores が最大のタイプと必ず一致させてください。
-5. rationale には、判断の根拠になったユーザーの発言を引用して1〜2文で書いてください。
-
-次のJSON形式のみを出力してください（挨拶やJSON以外のテキストは含めない）。
-{"primaryType":"<scoresが最大のタイプ名>","scores":{"achiever":<0-100>,"player":<0-100>,"socialiser":<0-100>,"freeSpirit":<0-100>,"philanthropist":<0-100>,"disruptor":<0-100>},"rationale":"<根拠>"}
-
-【ユーザーの発言】
-${userText}
-
-【会話全体（文脈の参考。AIの発言は根拠にしない）】
-${chatText}`;
-
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ 
-        message: finalPrompt
-      }),
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      const answerText = data.answer || '';
-      
-      const firstBrace = answerText.indexOf('{');
-      const lastBrace = answerText.lastIndexOf('}');
-      
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        const jsonStr = answerText.substring(firstBrace, lastBrace + 1);
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const result = normalizeHexadResult(parsed);
-          if (result) {
-            appState.hexadResult = result;
-            localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
-            $('#result-fallback-note').style.display = 'none';
-            renderResult(result);
-            showScreen('screen-result');
-            return;
-          }
-        } catch (e) {
-          console.error("JSON Parse error:", e, "Raw output:", jsonStr);
-        }
-      } else {
-        console.warn("LLM format mismatch. Raw answer:", answerText);
+    // 同時アクセスでAPI上限に当たりにくいよう、1回ずつ順番に判定する
+    const runs = [];
+    for (let i = 0; i < JUDGE_RUNS; i++) {
+      try {
+        const r = await judgeOnce(message);
+        if (r) runs.push(r);
+      } catch (e) {
+        console.error('Judge error:', e);
       }
-      
+    }
+
+    if (runs.length > 0) {
+      const result = normalizeHexadResult(aggregateJudgements(runs));
+      if (result) {
+        result.transcript = transcript;
+        appState.hexadResult = result;
+        localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
+        $('#result-fallback-note').style.display = 'none';
+        renderResult(result);
+        showScreen('screen-result');
+        return;
+      }
     }
   } catch (err) {
     console.error("Dify final evaluation error:", err);
@@ -1149,9 +1238,10 @@ ${chatText}`;
   // AIの質問文に含まれる語句（「目標」「達成」など）で達成者に偏らないよう、ユーザーの発言だけを集計する
   const chatText = getUserChatText();
 
+  // 注意: 「ゲーム」はほぼ全員が使う語なので含めない（以前はplayerに含まれており、playerに偏っていた）
   const KEYWORDS = {
     achiever: /上達|上手く|うまく|成長|スキル|極め|克服|習熟|腕を上げ|レベルアップ|目標を達成|目標達成|自己ベスト|記録を更新|速く打て/g,
-    player: /報酬|ポイント|コイン|景品|ご褒美|ごほうび|ランキング|スコア|勝ち|勝つ|勝負|アイテム|レア|集め|コレクション|ガチャ|ゲーム|バッジ|実績|トロフィー|もらえ|獲得/g,
+    player: /報酬|ポイント|コイン|景品|ご褒美|ごほうび|ランキング|勝ち|勝つ|勝負|アイテム|レア|集め|コレクション|ガチャ|バッジ|実績|トロフィー|もらえ|獲得/g,
     socialiser: /友達|友人|仲間|みんな|一緒に|皆|交流|つながり|ワイワイ|誰かと|他の人|ライバル|対戦|共有|チーム/g,
     freeSpirit: /自由|探求|探索|マイペース|自分のペース|自分なり|いろいろ|色々|好きに|発見|気ままに|縛られ|選べ|試し/g,
     philanthropist: /貢献|誰かのため|人のため|役に立|役立|教える|協力|サポート|助け|手伝|社会/g,
@@ -1184,7 +1274,9 @@ ${chatText}`;
   appState.hexadResult = {
     primaryType: bestType,
     scores: calculatedScores,
-    rationale: '会話内容から各要素の強さを推測しました。'
+    rationale: '会話内容から各要素の強さを推測しました。',
+    method: 'keyword_fallback',
+    transcript: getUserChatText()
   };
   localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(appState.hexadResult));
   
@@ -1257,7 +1349,7 @@ async function handleChatSend() {
           showScreen('screen-result');
         }, 1500);
       } catch(e) {
-        appendChatMessage('ai', '判定結果の解析に失敗しました。もう一度教えていただけますか？');
+        appendChatMessage('ai', '判定結果の解析に失敗しました。もう一度教えていただけますか？', { log: false });
       }
     } else {
       appendChatMessage('ai', answerText);
@@ -1266,7 +1358,7 @@ async function handleChatSend() {
     if(container.contains(loadingDiv)) container.removeChild(loadingDiv);
     
     const userFriendlyMsg = err.message.includes('現在AIの利用制限') ? err.message : 'エラーが発生しました: ' + err.message;
-    appendChatMessage('ai', userFriendlyMsg);
+    appendChatMessage('ai', userFriendlyMsg, { log: false });
   } finally {
     isChatting = false;
     $('#btn-chat-send').disabled = !input.value.trim();
@@ -2089,7 +2181,10 @@ function onGameFinished(result, isFullTime) {
     nickname: appState.nickname,
     hexadType: type,
     hexadScores: appState.hexadResult ? appState.hexadResult.scores : null,
-    classifyMethod: appState.hexadResult ? appState.hexadResult.method : 'rule',
+    classifyMethod: appState.hexadResult ? (appState.hexadResult.method || 'unknown') : 'rule',
+    judgeRuns: appState.hexadResult ? (appState.hexadResult.judgeRuns ?? '') : '',
+    hexadItems: appState.hexadResult ? (appState.hexadResult.items || null) : null,
+    chatTranscript: appState.hexadResult ? (appState.hexadResult.transcript || '') : '',
     sentenceCategory: appState.setup.category,
     difficulty: appState.setup.difficulty,
     timeLimitSec: game.timeLimitSec,
@@ -2271,11 +2366,15 @@ $('#btn-export-csv').addEventListener('click', () => {
   if (!log.length) { alert('記録がありません。'); return; }
   const cols = ['timestamp', 'participantId', 'group', 'nickname', 'hexadType', 'classifyMethod', 'sentenceCategory', 'difficulty', 'timeLimitSec', 'sentencesCompleted', 'elapsedSec', 'cpm', 'accuracy', 'mistakes', 'correctKeystrokes'];
   const hexadScoreCols = HEXAD_ORDER.map((t) => `score_${t}`);
-  const header = [...cols, ...hexadScoreCols].join(',');
+  // AIが推定した12項目の点数（1〜7、複数回判定の平均）。事後アンケート（HEX）との照合用
+  const itemCols = SURVEY_ITEMS.map((it) => `ai_item_${it.id}`);
+  const header = [...cols, 'judgeRuns', ...hexadScoreCols, ...itemCols, 'chatTranscript'].join(',');
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = log.map((r) => {
-    const base = cols.map((c) => `"${String(r[c] ?? '').replace(/"/g, '""')}"`);
+    const base = cols.map((c) => q(r[c]));
     const scores = HEXAD_ORDER.map((t) => r.hexadScores ? (r.hexadScores[t] ?? '') : '');
-    return [...base, ...scores].join(',');
+    const items = SURVEY_ITEMS.map((it) => r.hexadItems ? (r.hexadItems[it.id] ?? '') : '');
+    return [...base, q(r.judgeRuns), ...scores, ...items, q(r.chatTranscript)].join(',');
   });
   downloadBlob(`typing_research_log_${Date.now()}.csv`, '﻿' + [header, ...rows].join('\n'), 'text/csv');
   try { localStorage.setItem(CSV_DL_KEY, String(log.length)); } catch (e) {}
