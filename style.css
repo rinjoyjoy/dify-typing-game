@@ -671,3 +671,14 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
   .flow-arrow { height: 20px; }
   .flow-arrow svg { transform: rotate(90deg); }
 }
+
+/* 診断やり直し後：「記録は残っています」の案内 */
+.result-carryover {
+  color: var(--text-primary);
+  background: rgba(42,120,214,0.08);
+  border-left: 3px solid #2a78d6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 16px 0 4px;
+  line-height: 1.7;
+}

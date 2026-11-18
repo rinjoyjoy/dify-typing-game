@@ -1375,9 +1375,28 @@ function renderResult(result) {
         <span class="bar-value">${score}</span>
       </div>`;
   }).join('');
+
+  // 診断をやり直したとき：これまでの記録が残っていることを伝える（表示はタイプごとに変わるため、消えたと誤解されないように）
+  let carry = $('#result-carryover');
+  if (!carry) {
+    carry = document.createElement('p');
+    carry.id = 'result-carryover';
+    carry.className = 'hint result-carryover';
+    chart.insertAdjacentElement('afterend', carry);
+  }
+  const st = getStats();
+  if (st.typeBeforeRediagnose) {
+    carry.textContent = `これまでの記録（${st.sessionsCompleted || 0}回のプレイ・コイン ${st.coins || 0} 枚・自己ベスト ${st.bestCpm || 0} CPM など）は、そのまま残っています。練習画面に表示される内容は、新しいタイプに合わせて変わります。`;
+    carry.style.display = 'block';
+  } else {
+    carry.style.display = 'none';
+  }
 }
 
 $('#btn-goto-setup').addEventListener('click', () => {
+  // 「記録は残っています」の案内は、やり直し直後の結果画面で1回だけ出す
+  const st = getStats();
+  if (st.typeBeforeRediagnose) { delete st.typeBeforeRediagnose; saveStats(st); }
   renderSetup();
   showScreen('screen-setup');
 });
@@ -1403,10 +1422,12 @@ function buildRediagnosePromptHtml(stats, buttonId) {
 
 // 設定画面から呼ばれる、タイプ診断のやり直し（制限時間いっぱいのプレイを3回終えると提案される）
 function triggerRediagnose() {
-  if (confirm('現在の診断結果をリセットし、もう一度チャット診断からやり直しますか？\n（スコアや獲得コイン等の実績は維持されます）')) {
+  if (confirm('現在の診断結果をリセットし、もう一度チャット診断からやり直しますか？\n（これまでのコインや自己ベストなどの記録は消えずに残ります。画面に表示される内容は、新しいタイプに合わせて変わります）')) {
+    // 記録（stats）は消さない。やり直し前のタイプを覚えておき、結果画面で「記録は残っている」ことを伝える
+    const prevType = appState.hexadResult ? appState.hexadResult.primaryType : null;
     localStorage.removeItem(STORAGE_KEYS.hexadResult);
     appState.hexadResult = null;
-    const s = getStats(); s.fullTimeStreak = 0; s.rediagnosePromptShown = false; saveStats(s);
+    const s = getStats(); s.fullTimeStreak = 0; s.rediagnosePromptShown = false; s.typeBeforeRediagnose = prevType; saveStats(s);
     renderSurvey();
     showScreen('screen-survey');
   }
