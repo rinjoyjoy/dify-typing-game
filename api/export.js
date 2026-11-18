@@ -3,7 +3,8 @@ const { query } = require('./db');
 const PostSurvey = require('../post-survey-items.js');
 
 /* 研究者用：データをCSVでダウンロードする
-   /api/export?key=合言葉                 … 参加者ごとに1行（アンケート＋時刻＋診断＋プレイ集計）。分析はこれを使う
+   /api/export?key=合言葉                 … アンケート回答ごとに1行（アンケート＋時刻＋診断＋プレイ集計）。分析はこれを使う
+                                            同じ参加者番号の回答が複数あれば、すべて別の行で出る（entry_id・pid_duplicates 列で確認）
    /api/export?key=合言葉&type=sessions   … プレイ1回ごとの生データ
    /api/export?key=合言葉&type=raw        … アンケート送信データそのもの（JSON）
    合言葉は Vercel の環境変数 RESEARCH_EXPORT_KEY に設定する。 */
@@ -63,13 +64,15 @@ function spearman(x, y) {
 }
 
 async function summaryRows() {
+  // 1回答＝1行（同じ参加者番号の回答が複数あっても、上書き・統合せずにすべて出す。pid_duplicates で確認できる）
   const surveys = (await query(`
-    SELECT DISTINCT ON (COALESCE(participant_id, id::text)) id, participant_id, participant_group, condition, answers, payload, created_at
+    SELECT id, participant_id, entry_id, participant_group, condition, answers, payload, created_at
     FROM survey_responses
-    ORDER BY COALESCE(participant_id, id::text), created_at DESC
+    ORDER BY created_at
   `)).rows;
+  // プレイ記録は参加IDごとに集計する（参加IDがない古い記録は参加者番号で集計）
   const play = (await query(`
-    SELECT participant_id,
+    SELECT COALESCE(entry_id, 'pid:' || participant_id) AS play_key,
       COUNT(*) AS n_sessions,
       SUM(elapsed_sec) AS total_play_sec,
       AVG(cpm) AS mean_cpm, MAX(cpm) AS max_cpm,
@@ -77,10 +80,12 @@ async function summaryRows() {
       SUM(correct_keystrokes) AS total_correct_keystrokes,
       SUM(mistakes) AS total_mistakes
     FROM typing_sessions
-    WHERE participant_id IS NOT NULL
-    GROUP BY participant_id
+    WHERE participant_id IS NOT NULL OR entry_id IS NOT NULL
+    GROUP BY COALESCE(entry_id, 'pid:' || participant_id)
   `)).rows;
-  const playByPid = new Map(play.map((p) => [String(p.participant_id), p]));
+  const playByKey = new Map(play.map((p) => [String(p.play_key), p]));
+  const pidCount = new Map();
+  surveys.forEach((s) => { const k = String(s.participant_id); pidCount.set(k, (pidCount.get(k) || 0) + 1); });
 
   const itemIds = PostSurvey.ALL_ITEMS.map((i) => i.id);
   const hexItems = PostSurvey.ALL_ITEMS.filter((i) => i.scale === 'HEX');
@@ -91,6 +96,8 @@ async function summaryRows() {
     const ev = p.events || {};
     const row = {
       participant_id: s.participant_id,
+      entry_id: s.entry_id || p.entryId || '',
+      pid_duplicates: pidCount.get(String(s.participant_id)) || 1, // 2以上なら、同じ番号で複数回答がある
       group: s.participant_group,
       condition: s.condition,
       submitted_at: s.created_at && new Date(s.created_at).toISOString(),
@@ -147,7 +154,8 @@ async function summaryRows() {
     COUNT_COLS.forEach((k) => { row[k] = ev[k] ?? 0; });
 
     // プレイ記録（DBの typing_sessions を参加者番号で集計）
-    const pl = playByPid.get(String(s.participant_id)) || {};
+    const eid = s.entry_id || p.entryId;
+    const pl = (eid && playByKey.get(String(eid))) || playByKey.get(`pid:${s.participant_id}`) || {};
     row.n_sessions = pl.n_sessions ?? '';
     row.total_play_sec = pl.total_play_sec != null ? Math.round(Number(pl.total_play_sec) * 10) / 10 : '';
     row.mean_cpm = pl.mean_cpm != null ? Math.round(Number(pl.mean_cpm) * 10) / 10 : '';
@@ -185,9 +193,9 @@ module.exports = async function handler(req, res) {
       const header = rows.length ? Object.keys(rows[0]) : ['id'];
       csv = toCsv(header, rows);
     } else if (type === 'raw') {
-      const rows = (await query(`SELECT id, participant_id, participant_group, condition, created_at, payload FROM survey_responses ORDER BY created_at`)).rows
+      const rows = (await query(`SELECT id, participant_id, entry_id, participant_group, condition, created_at, payload FROM survey_responses ORDER BY created_at`)).rows
         .map((r) => ({ ...r, created_at: r.created_at && new Date(r.created_at).toISOString() }));
-      csv = toCsv(['id', 'participant_id', 'participant_group', 'condition', 'created_at', 'payload'], rows);
+      csv = toCsv(['id', 'participant_id', 'entry_id', 'participant_group', 'condition', 'created_at', 'payload'], rows);
     } else {
       const { header, rows } = await summaryRows();
       csv = toCsv(header, rows);

@@ -22,6 +22,7 @@
     participant: 'gtp_participant_meta',
     log: 'gtp_log',
     hexadResult: 'gtp_hexad_result',
+    entryId: 'gtp_entry_id',
   };
   const CONDITION_LABELS = { A: 'AI対話', B: 'アンケート', C: '診断なし' };
 
@@ -374,6 +375,7 @@
     mark('surveySubmit', { overwrite: true });
     return {
       participantId: pid,
+      entryId: entryId(),
       group,
       condition: CONDITION_LABELS[group] || null,
       itemsVersion: ITEMS_VERSION,
@@ -458,9 +460,15 @@
     }
   })();
 
-  // 別の参加者番号が入力されたら、同じブラウザに残っている前の人の記録（プレイ記録・診断結果・
-  // 時刻・アンケートの下書きなど）を消す。未送信のアンケート（pending）は前の人のデータなので残し、送信を再試行させる。
+  // 参加者番号が入力されるたびに（同じ番号でも）、この端末に残っている記録（プレイ記録・自己ベスト・診断結果・
+  // 時刻・アンケートの下書きなど）を消し、新しい「参加ID（entryId）」を発行する。
+  // DBへの保存はすべて参加IDつきの追加保存なので、同じ番号が2回使われても、前の記録が上書きされることはない。
+  // 未送信のアンケート（pending）は前の参加のデータなので残し、送信を再試行させる。
   const KEEP_ON_RESET = ['gtp_model', KEYS.pending];
+  function newId() {
+    try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+    return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
   function resetForNewParticipant() {
     try {
       Object.keys(localStorage)
@@ -470,10 +478,18 @@
     draft = { page: 0, answers: {} };
     surveyOpen = false;
     lastPhase = null;
+    const id = newId();
+    save(KEYS.entryId, id);
+    return id;
+  }
+  function entryId() {
+    let id = load(KEYS.entryId, null);
+    if (!id) { id = newId(); save(KEYS.entryId, id); }
+    return id;
   }
 
   window.StudyFlow = {
-    resetForNewParticipant,
+    resetForNewParticipant, entryId,
     REQUIRED_PLAY_MS, MAX_PLAY_MS,
     mark, bump, getEvents, playState,
     updatePostgame, openSurvey,

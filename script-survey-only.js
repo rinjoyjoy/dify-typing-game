@@ -817,7 +817,8 @@ async function saveSessionToVercelDb(record) {
     const res = await fetch('/api/save-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(record)
+      // 参加ID（番号を入力するたびに発行）をつけて保存し、同じ番号の別の参加と混ざらないようにする
+      body: JSON.stringify({ ...record, entryId: window.StudyFlow ? StudyFlow.entryId() : null })
     });
     if (res.ok) {
       console.log('Vercel DBへプレイ記録を正常に保存しました');

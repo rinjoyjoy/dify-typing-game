@@ -22,11 +22,12 @@ module.exports = async function handler(req, res) {
 
     const result = await query(
       `INSERT INTO survey_responses
-         (participant_id, participant_group, condition, items_version, answers, payload)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (participant_id, entry_id, participant_group, condition, items_version, answers, payload)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, created_at;`,
       [
         str(body.participantId, 50),
+        str(body.entryId, 64),
         str(body.group, 10),
         str(body.condition, 20),
         str(body.itemsVersion, 20),

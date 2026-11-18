@@ -47,6 +47,7 @@ async function initDb() {
     ALTER TABLE typing_sessions ADD COLUMN IF NOT EXISTS mistakes INT;
     ALTER TABLE typing_sessions ADD COLUMN IF NOT EXISTS classify_method VARCHAR(20);
     ALTER TABLE typing_sessions ADD COLUMN IF NOT EXISTS hexad_scores JSONB;
+    ALTER TABLE typing_sessions ADD COLUMN IF NOT EXISTS entry_id VARCHAR(64);
   `;
   // 本実験のアプリ内アンケート（1回答＝1行。回答・記録した時刻・診断結果などはJSONでまとめて保存）
   const createSurveyTableQuery = `
@@ -65,6 +66,7 @@ async function initDb() {
     await pool.query(createTableQuery);
     await pool.query(migrateQuery);
     await pool.query(createSurveyTableQuery);
+    await pool.query(`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS entry_id VARCHAR(64);`);
     isInitialized = true;
   } catch (err) {
     console.error('Error initializing database:', err);
