@@ -947,7 +947,7 @@ function renderSurvey() {
   $('#chat-messages').innerHTML = '';
   conversationId = "";
   // 最初の質問はタイプを連想させる例を出さず、自由に話してもらう（AIが答えに合わせて次の質問を選ぶ）
-  appendChatMessage('ai', 'こんにちは！あなたに合ったタイピング練習にするため、ゲームやふだんのことについて少しだけお話を聞かせてください（4〜5回のやりとりで終わります）。\nまずは、最近ハマっているゲームや趣味（ゲーム以外でもOK）と、それのどんなところが楽しいかを教えてください。');
+  appendChatMessage('ai', 'こんにちは！あなたに合ったタイピング練習にするため、ゲームやふだんのことについて少しだけお話を聞かせてください（4〜5回のやりとりで終わります）。\n選択肢が出たら、ボタンを押して答えても、自由に書いて答えてもかまいません。\nまずは、最近ハマっているゲームや趣味（ゲーム以外でもOK）と、それのどんなところが楽しいかを教えてください。');
   $('#chat-input').value = '';
   $('#btn-chat-send').disabled = false;
 }
@@ -964,13 +964,15 @@ function appendChatMessage(role, text) {
     let hasChoices = false;
     let choicesHtml = '';
     
-    if (text.includes('1.') || text.includes('1、')) {
+    // 選択肢の行（例:「1. 〜」）をボタンにする。行頭の空白・全角数字・「1)」「1）」「1．」の形にも対応する
+    const CHOICE_LINE = /^\s*([0-9０-９]+)\s*[\.\、\)）．]\s*(.+)$/;
+    if (text.split('\n').some((l) => CHOICE_LINE.test(l))) {
       const lines = text.split('\n');
       let mainText = [];
       let buttons = [];
       
       lines.forEach(line => {
-        const m = line.match(/^(\d+)[\.\、]\s*(.+)$/);
+        const m = line.match(CHOICE_LINE);
         if (m) {
           buttons.push(m[2].trim());
         } else {
