@@ -58,6 +58,27 @@
     .chat div { padding: 6px 10px; border-radius: 8px; max-width: 85%; white-space: pre-wrap; }
     .chat .ai { background: var(--page); align-self: flex-start; }
     .chat .user { background: color-mix(in srgb, var(--text-primary) 10%, transparent); align-self: flex-end; }
+    /* タブ */
+    .maintabs { display: flex; gap: 4px; margin: 22px 0 0; border-bottom: 1.5px solid var(--baseline); position: sticky; top: 0; background: var(--surface-1); z-index: 5; padding-top: 6px; }
+    .maintab { font: inherit; font-weight: 700; padding: 9px 16px; border: 1.5px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: none; color: var(--text-secondary); cursor: pointer; margin-bottom: -1.5px; }
+    .maintab[aria-selected="true"] { color: var(--text-primary); background: var(--surface-1); border-color: var(--baseline); border-bottom: 1.5px solid var(--surface-1); }
+    .maintab:hover { color: var(--text-primary); }
+    .admin-section.first { margin-top: 0; border-top: none; }
+    .subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+    .subtab { font: inherit; font-size: 0.85rem; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--baseline); background: var(--surface-1); color: var(--text-secondary); cursor: pointer; }
+    .subtab[aria-selected="true"] { background: var(--text-primary); border-color: var(--text-primary); color: var(--surface-1); }
+    .analysis { scroll-margin-top: 70px; } /* 上部に固定したタブで見出しが隠れないように */
+    .analysis-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    details.more { margin-top: 10px; }
+    details.more summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+    .sum-head { font-size: 0.95rem; margin: 18px 0 6px; }
+    .sum-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .sum-item { width: 100%; text-align: left; font: inherit; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--gridline); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+    .sum-item:hover { border-color: var(--text-primary); }
+    .sum-title { font-weight: 700; font-size: 0.9rem; }
+    .sum-lead { grid-column: 2; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+    .method-list { padding-left: 1.2em; line-height: 1.8; font-size: 0.9rem; }
+
     /* 統計分析のグラフ。群の色は、検証済みの3色（青・オレンジ・アクア）を固定で割り当てる */
     .stats-root { --g-A: #2a78d6; --g-B: #eb6834; --g-C: #1baf7a; }
     @media (prefers-color-scheme: dark) { .stats-root { --g-A: #3987e5; --g-B: #d95926; --g-C: #199e70; } }
@@ -111,8 +132,16 @@
         </div>
 
         <div id="panel" style="display:none;">
+          <div class="maintabs" role="tablist">
+            <button type="button" role="tab" class="maintab" data-main="progress">進み具合</button>
+            <button type="button" role="tab" class="maintab" data-main="analysis">統計分析</button>
+            <button type="button" role="tab" class="maintab" data-main="people">参加者一覧</button>
+            <button type="button" role="tab" class="maintab" data-main="data">データ管理</button>
+          </div>
+
+          <div class="mainpanel" data-mainpanel="progress">
           <!-- 進捗 -->
-          <div class="admin-section">
+          <div class="admin-section first">
             <h2>進み具合</h2>
             <p class="hint">アンケートまで回答した人数です。参加者番号900以上はテストとして数えません。目標人数：<input type="number" id="target" min="1" value="10"> 人／群</p>
             <div class="kpis" id="kpis"></div>
@@ -125,14 +154,18 @@
             <div class="tbl-wrap"><table class="tbl" id="group-table"></table></div>
           </div>
 
-          <!-- 統計分析 -->
-          <div class="admin-section stats-root">
-            <h2>統計分析（グラフつき）</h2>
-            <div id="analysis"></div>
           </div>
 
+          <div class="mainpanel" data-mainpanel="analysis" hidden>
+          <!-- 統計分析 -->
+          <div class="admin-section first stats-root">
+            <div id="analysis"></div>
+          </div>
+          </div>
+
+          <div class="mainpanel" data-mainpanel="people" hidden>
           <!-- 参加者一覧 -->
-          <div class="admin-section">
+          <div class="admin-section first">
             <h2>参加者一覧</h2>
             <div class="filters">
               <label><input type="checkbox" id="hide-test" checked> テスト（900番以上）を隠す</label>
@@ -156,8 +189,11 @@
             <p id="row-msg" class="admin-msg" style="display:none;"></p>
           </div>
 
+          </div>
+
+          <div class="mainpanel" data-mainpanel="data" hidden>
           <!-- CSV -->
-          <div class="admin-section">
+          <div class="admin-section first">
             <h2>CSVをダウンロード</h2>
             <p class="hint">ExcelやGoogleスプレッドシートでそのまま開けます。テストの記録も含まれるので、分析の前に除いてください。</p>
             <div class="admin-dl">
@@ -184,6 +220,7 @@
               <div class="button-row"><button id="btn-delete" class="btn btn-secondary">削除を実行</button></div>
               <p id="delete-msg" class="admin-msg" style="display:none;"></p>
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -257,6 +294,17 @@
         $('#dl-sessions').href = `/api/export?key=${k}&type=sessions`;
         $('#dl-raw').href = `/api/export?key=${k}&type=raw`;
       }
+
+      // メインのタブ（選んだタブはこのブラウザで覚える）
+      function selectMain(id) {
+        document.querySelectorAll('.maintab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.main === id)));
+        document.querySelectorAll('.mainpanel').forEach((p) => { p.hidden = p.dataset.mainpanel !== id; });
+        try { localStorage.setItem('admin_main_tab', id); } catch (e) {}
+      }
+      document.querySelectorAll('.maintab').forEach((b) => b.addEventListener('click', () => selectMain(b.dataset.main)));
+      let startTab = 'progress';
+      try { startTab = localStorage.getItem('admin_main_tab') || 'progress'; } catch (e) {}
+      selectMain(startTab);
 
       function renderAll() {
         renderKpis(); renderGroups(); renderPeople();
