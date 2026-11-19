@@ -837,6 +837,8 @@ function showScreen(id) {
    Vercel Postgres (DB) 通信処理
    ============================================================ */
 async function saveSessionToVercelDb(record) {
+  // アンケート送信後に「AIでタイプ診断してみる」を始めた後のプレイは、研究データに含めないのでDBに送らない
+  if (window.StudyFlow && StudyFlow.isAiTrial && StudyFlow.isAiTrial()) return;
   try {
     const res = await fetch('/api/save-session', {
       method: 'POST',
@@ -1407,7 +1409,8 @@ $('#btn-goto-setup').addEventListener('click', () => {
 // 提案を無視してそのまま次のプレイを始めたら、提案は一旦消えてカウントをリセットする（毎回しつこく出さないように）。
 function buildRediagnosePromptHtml(stats, buttonId) {
   // 診断のやり直しは、アンケート送信後だけ提案する（実験中のデータに混ざらないように）
-  const show = !!(window.StudyFlow && StudyFlow.isSubmitted && StudyFlow.isSubmitted());
+  // 診断のやり直しは、アンケート送信後に「AIでタイプ診断してみる」（結果画面・送信完了画面）から行う
+  const show = false;
   if (!show) return '';
   if (!stats.rediagnosePromptShown) {
     stats.rediagnosePromptShown = true;

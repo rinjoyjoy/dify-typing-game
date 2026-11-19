@@ -1094,7 +1094,8 @@ $('#btn-goto-setup').addEventListener('click', () => {
 // 提案を無視してそのまま次のプレイを始めたら、提案は一旦消えてカウントをリセットする（毎回しつこく出さないように）。
 function buildRediagnosePromptHtml(stats, buttonId) {
   // 診断のやり直しは、アンケート送信後だけ提案する（実験中のデータに混ざらないように）
-  const show = !!(window.StudyFlow && StudyFlow.isSubmitted && StudyFlow.isSubmitted());
+  // 診断のやり直しは、アンケート送信後に「AIでタイプ診断してみる」（結果画面・送信完了画面）から行う
+  const show = false;
   if (!show) return '';
   if (!stats.rediagnosePromptShown) {
     stats.rediagnosePromptShown = true;

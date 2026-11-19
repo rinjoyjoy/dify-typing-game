@@ -22,7 +22,8 @@
     participant: 'gtp_participant_meta',
     log: 'gtp_log',
     hexadResult: 'gtp_hexad_result',
-    diagHistory: 'gtp_diag_history', // 診断をやり直したとき、やり直す前の診断（結果・会話・回答）を残す
+    diagHistory: 'gtp_diag_history',
+    aiTrial: 'gtp_ai_trial', // アンケート送信後に「AIでタイプ診断してみる」を始めた（以降のプレイはDBに送らない） // 診断をやり直したとき、やり直す前の診断（結果・会話・回答）を残す
     entryId: 'gtp_entry_id',
   };
   const CONDITION_LABELS = { A: 'AI対話', B: 'アンケート', C: '診断なし' };
@@ -210,7 +211,10 @@
     // アンケート送信後：ここからのプレイは研究データに含めない（自由に遊べる）
     if (isSubmitted()) {
       box.style.display = 'none';
-      note.innerHTML = 'アンケートは送信済みです。ここからは自由に遊べます。<br><span class="hint">このページはいつ閉じてもかまいません。</span>';
+      note.innerHTML = 'アンケートは送信済みです。ここからは自由に遊べます。<br><span class="hint">このページはいつ閉じてもかまいません。</span>'
+        + '<div class="gate-ai"><button type="button" id="btn-ai-trial-postgame" class="btn btn-tertiary">AIでタイプ診断してみる（任意）</button></div>';
+      const ab = qs('#btn-ai-trial-postgame');
+      if (ab) ab.onclick = () => startAiTrial();
       again.textContent = 'もう一度プレイ';
       again.className = 'btn btn-primary';
       again.style.display = '';
@@ -461,9 +465,7 @@
   }
 
   function renderDone(sec) {
-    const { pid, group } = participant();
-    // 診断のやり直しは、アンケート送信後だけ（AI対話群・アンケート群）
-    const canRediagnose = (group === 'A' || group === 'B') && typeof triggerRediagnose === 'function';
+    const { pid } = participant();
     sec.innerHTML = `
       <div class="card center ps-card">
         <h2>回答を送信しました</h2>
@@ -475,11 +477,11 @@
           <p>この研究では、ゲームを始める前の「タイプ診断」のやり方（AIとの対話・アンケート・診断なし）によって、ゲームの始めやすさや楽しさがどう変わるかを調べています。参加者によって、診断のやり方が異なります。</p>
           <p><strong>結果に影響するため、これから参加する人には、ゲームやアンケートの内容を話さないようお願いします。</strong></p>
         </div>
-        ${canRediagnose ? `<div class="ps-after">
-          <h3>別のタイプも試してみる（任意）</h3>
-          <p>診断をやり直すと、別のタイプに合わせた画面で遊べます。研究のデータはすでに送信済みなので、ここからは自由に試してください。コインや自己ベストなどの記録は残ります。</p>
-          <button type="button" id="btn-rediagnose-after" class="btn btn-secondary">タイプ診断をやり直す</button>
-        </div>` : ''}
+        <div class="ps-after">
+          <h3>AIでタイプ診断してみる（任意）</h3>
+          <p>AIとの短い対話で、あなたのタイプを診断します。診断結果に合わせた画面で、続けて遊べます。研究のデータはすでに送信済みなので、ここからは自由に試してください。コインや自己ベストなどの記録は残ります。</p>
+          <button type="button" id="btn-ai-trial-done" class="btn btn-secondary">AIでタイプ診断する</button>
+        </div>
       </div>`;
     const pm = sec.querySelector('#btn-play-more');
     if (pm) pm.addEventListener('click', () => {
@@ -488,11 +490,8 @@
       if (typeof renderSetup === 'function') renderSetup(); // 各群のスクリプトの関数
       if (typeof showScreen === 'function') showScreen('screen-setup');
     });
-    const rb = sec.querySelector('#btn-rediagnose-after');
-    if (rb) rb.addEventListener('click', () => {
-      surveyOpen = false;
-      triggerRediagnose(); // 各群のスクリプトの関数（確認ダイアログ → 診断画面へ）
-    });
+    const ab = sec.querySelector('#btn-ai-trial-done');
+    if (ab) ab.addEventListener('click', () => startAiTrial());
   }
 
   // 前回、送信に失敗したまま閉じていた場合は、次に開いたときに自動で送り直す
@@ -530,6 +529,36 @@
     save(KEYS.diagHistory, hist);
     bump('n_rediagnose_done');
     try { localStorage.removeItem(KEYS.chat); } catch (e) {}
+  }
+
+  // アンケート送信後の「AIでタイプ診断してみる」。どの群でも使える（研究データには含めない）
+  // AI対話群（または、すでにAI診断を試している人）は、その場で診断をやり直す。
+  // アンケート群・診断なし群は、記録を引き継いでAI対話群の画面に切り替える（ページを読み込み直す）。
+  function isAiTrial() { return !!load(KEYS.aiTrial, null); }
+  function startAiTrial() {
+    if (!isSubmitted()) return;
+    const meta = load('gtp_participant_meta', {}) || {};
+    const group = meta.group;
+    if (group === 'A' || isAiTrial()) {
+      if (typeof triggerRediagnose !== 'function') return;
+      if (!isAiTrial()) save(KEYS.aiTrial, { from: group, at: new Date().toISOString() });
+      surveyOpen = false;
+      triggerRediagnose(); // AI対話群のスクリプトの関数（確認 → 対話診断へ）
+      return;
+    }
+    if (!confirm('AIとの対話でタイプを診断します。よろしいですか？\n（これまでのコインや自己ベストなどの記録は残ります）')) return;
+    // これまでの記録（コイン・自己ベストなど）をAI対話群の画面に引き継ぐ
+    const fromKey = group === 'B' ? 'gtp_so_stats' : 'gtp_nd_stats';
+    const st = load(fromKey, null);
+    if (st) {
+      const prevRes = group === 'B' ? load('gtp_so_hexad_result', null) : { primaryType: 'achiever' };
+      st.typeBeforeRediagnose = prevRes && prevRes.primaryType ? prevRes.primaryType : null;
+      st.fullTimeStreak = 0; st.rediagnosePromptShown = false;
+      save('gtp_stats', st);
+    }
+    try { localStorage.removeItem('gtp_hexad_result'); } catch (e) {}
+    save(KEYS.aiTrial, { from: group, at: new Date().toISOString() });
+    location.reload();
   }
 
   function resetForNewParticipant() {
@@ -576,6 +605,6 @@
     REQUIRED_PLAY_MS, MAX_PLAY_MS,
     mark, bump, getEvents, playState,
     updatePostgame, openSurvey,
-    recordClear, easeFactor, archiveDiagnosis, isSubmitted,
+    recordClear, easeFactor, archiveDiagnosis, isSubmitted, isAiTrial, startAiTrial,
   };
 })();
