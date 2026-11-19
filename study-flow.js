@@ -8,7 +8,7 @@
   'use strict';
 
   const REQUIRED_PLAY_MS = 5 * 60 * 1000;   // 必須プレイ：初回のスタートから5分
-  const MAX_PLAY_MS = 15 * 60 * 1000;       // これを過ぎたら「もう少し遊ぶ」を出さずにアンケートへ誘導
+  const MAX_PLAY_MS = REQUIRED_PLAY_MS;     // 5分たったら、アンケートを送信するまで新しいプレイは始められない（送信後は自由に遊べる）
   const ITEMS_VERSION = '2026-11-18b';
 
   const KEYS = {
@@ -81,6 +81,13 @@
   document.addEventListener('click', (e) => {
     const btn = e.target && e.target.closest ? e.target.closest('button') : null;
     if (!btn || !btn.id) return;
+    // 5分たったら、アンケートを送信するまでプレイを始められない（押したらアンケートへ）
+    if ((btn.id === 'btn-start-game' || btn.id === 'btn-play-again') && playGated()) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      openSurvey();
+      return;
+    }
     switch (btn.id) {
       case 'btn-start-survey-llm':   // AI対話群：診断開始
       case 'btn-start-survey':       // アンケート群：診断開始
@@ -97,7 +104,7 @@
         break;
       case 'btn-start-game':
       case 'btn-play-again':
-        if (playState().phase === 'free') bump('n_free_continue');
+        if (isSubmitted()) bump('n_post_survey_games'); // アンケート送信後に自分から遊んだ回数
         mark('firstGameStart');
         bump('n_games_started');
         break;
@@ -115,6 +122,11 @@
     if (elapsed < REQUIRED_PLAY_MS) return { phase: 'required', elapsed, remaining: REQUIRED_PLAY_MS - elapsed };
     if (elapsed < MAX_PLAY_MS) return { phase: 'free', elapsed, remaining: MAX_PLAY_MS - elapsed };
     return { phase: 'over', elapsed, remaining: 0 };
+  }
+  // 5分のプレイが終わり、まだアンケートを送信していない
+  function playGated() {
+    const ph = playState().phase;
+    return (ph === 'free' || ph === 'over') && !load(KEYS.submitted, null);
   }
   function fmtClock(ms) {
     const s = Math.max(0, Math.ceil(ms / 1000));
@@ -162,8 +174,7 @@
     if (isSubmitted()) text = 'アンケート送信済み｜ここからは自由に遊べます';
     else if (st.phase === 'notStarted') text = 'プレイ時間の目安：約5分';
     else if (st.phase === 'required') text = `アンケートまで あと ${fmtClock(st.remaining)}`;
-    else if (st.phase === 'free') text = '必須のプレイ完了｜結果画面からアンケートに進めます';
-    else text = 'プレイ時間終了｜結果画面からアンケートに進んでください';
+    else text = '5分のプレイ終了｜アンケートに答えてください';
     p.textContent = text;
     p.dataset.phase = st.phase;
     p.style.display = 'block';
@@ -193,7 +204,7 @@
     const exportUi = qs('#secret-export-ui'); if (exportUi) exportUi.style.display = 'none';
     const label = qs('.step-label', box); if (label) label.style.display = 'none';
     const stepNote = qs('#survey-step-note'); if (stepNote) stepNote.style.display = 'none';
-    const ctaText = qs('.survey-cta-text', box); if (ctaText) ctaText.textContent = 'プレイおつかれさまでした。最後にアンケートにご協力ください。';
+    const ctaText = qs('.survey-cta-text', box); if (ctaText) ctaText.textContent = 'プレイおつかれさまでした。ここでアンケートにご協力ください。';
     if (goBtn) { goBtn.disabled = false; goBtn.lastChild.textContent = 'アンケートに進む'; }
 
     // アンケート送信後：ここからのプレイは研究データに含めない（自由に遊べる）
@@ -211,23 +222,16 @@
     lastPhase = st.phase;
     if (st.phase === 'notStarted' || st.phase === 'required') {
       box.style.display = 'none';
-      note.innerHTML = `<strong>あと約${ceilMin(st.remaining)}分</strong>プレイすると、アンケートに進めます。<br><span class="hint">「もう一度プレイ」で続けてください。制限時間などは「設定に戻る」から変えられます。</span>`;
+      note.innerHTML = `<strong>あと約${ceilMin(st.remaining)}分</strong>プレイしたら、一度アンケートに答えていただきます。<br><span class="hint">「もう一度プレイ」で続けてください。制限時間などは「設定に戻る」から変えられます。</span>`;
       again.textContent = 'もう一度プレイ';
       again.className = 'btn btn-primary';
       again.style.display = '';
       if (back) back.style.display = '';
-    } else if (st.phase === 'free') {
-      mark('freeChoiceShown');
-      box.style.display = 'block';
-      note.innerHTML = `<strong>必須のプレイ（約5分）が終わりました。</strong><br>アンケートに進むか、もう少し遊ぶかを選べます。どちらを選んでも問題ありません。<br><span class="hint">もう少し遊ぶ場合も、あと約${ceilMin(st.remaining)}分でアンケートに進んでいただきます。</span>`;
-      again.textContent = 'もう少し遊ぶ';
-      again.className = 'btn btn-secondary';
-      again.style.display = '';
-      if (back) back.style.display = '';
     } else {
+      // 5分たったら、まずアンケート（回答後は続けて遊べる）
       mark('freeChoiceShown');
       box.style.display = 'block';
-      note.innerHTML = '<strong>プレイ時間の上限になりました。</strong><br>アンケートに進んでください。';
+      note.innerHTML = '<strong>5分のプレイが終わりました。</strong><br>ここで一度アンケートに答えてください。<br><span class="hint">回答を送信したあとは、続けて遊べます。</span>';
       again.style.display = 'none';
       if (back) back.style.display = 'none';
     }
@@ -464,6 +468,7 @@
       <div class="card center ps-card">
         <h2>回答を送信しました</h2>
         <p class="lead">ご協力ありがとうございました。このページは閉じてかまいません。</p>
+        <p><button type="button" id="btn-play-more" class="btn btn-secondary">続けて遊ぶ（任意）</button></p>
         ${pid ? `<p class="hint">参加者番号: ${esc(pid)}</p>` : ''}
         <div class="ps-debrief">
           <h3>この研究について</h3>
@@ -476,6 +481,13 @@
           <button type="button" id="btn-rediagnose-after" class="btn btn-secondary">タイプ診断をやり直す</button>
         </div>` : ''}
       </div>`;
+    const pm = sec.querySelector('#btn-play-more');
+    if (pm) pm.addEventListener('click', () => {
+      surveyOpen = false;
+      sec.classList.remove('active');
+      if (typeof renderSetup === 'function') renderSetup(); // 各群のスクリプトの関数
+      if (typeof showScreen === 'function') showScreen('screen-setup');
+    });
     const rb = sec.querySelector('#btn-rediagnose-after');
     if (rb) rb.addEventListener('click', () => {
       surveyOpen = false;
@@ -548,7 +560,7 @@
   // 再開後、前回いた段階に戻す：アンケートの途中ならアンケートへ、診断が済んでいれば練習の準備画面へ
   function resumeView() {
     const ev = getEvents();
-    if (ev.surveyStart && !load(KEYS.submitted, null)) { openSurvey(); return; }
+    if ((ev.surveyStart || playGated()) && !load(KEYS.submitted, null)) { openSurvey(); return; }
     const resumeBtn = document.getElementById('btn-resume-session');
     if (resumeBtn && resumeBtn.style.display !== 'none') resumeBtn.click();
   }

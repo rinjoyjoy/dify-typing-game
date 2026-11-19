@@ -67,7 +67,7 @@ async function summaryRows() {
   // プレイ記録は参加IDごとに集計する（参加IDがない古い記録は参加者番号で集計）
   // 診断をやり直した人は、やり直し後のプレイを含めないので、1回ずつ取り出してから集計する
   const sessions = (await query(`
-    SELECT COALESCE(entry_id, 'pid:' || participant_id) AS play_key, created_at,
+    SELECT COALESCE(entry_id, 'pid:' || participant_id) AS play_key, created_at, hexad_type,
       elapsed_sec, cpm, accuracy, correct_keystrokes, mistakes
     FROM typing_sessions
     WHERE participant_id IS NOT NULL OR entry_id IS NOT NULL
@@ -182,6 +182,20 @@ async function summaryRows() {
     const eid = s.entry_id || p.entryId;
     const plList = (eid && sessionsByKey.get(String(eid))) || sessionsByKey.get(`pid:${s.participant_id}`) || [];
     const pl = aggPlay(plList, cutoff); // やり直した人は、やり直すまでのプレイだけ
+    // アンケート送信後に自分から遊んだ分（自由継続）。送信後に診断をやり直してタイプが変わったら、そこで打ち切る
+    if (submittedAt) {
+      const subT = new Date(submittedAt).getTime();
+      const sorted = [...plList].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const pre = sorted.filter((r) => new Date(r.created_at).getTime() <= subT);
+      const refType = (pre.length && pre[pre.length - 1].hexad_type) || (finalHr && finalHr.primaryType) || null;
+      let n = 0, sec = 0;
+      for (const r of sorted.filter((r) => new Date(r.created_at).getTime() > subT)) {
+        if (refType && r.hexad_type && r.hexad_type !== refType) break;
+        n += 1; sec += Number(r.elapsed_sec) || 0;
+      }
+      row.post_survey_sessions = n;
+      row.post_survey_play_sec = sec;
+    } else { row.post_survey_sessions = ''; row.post_survey_play_sec = ''; }
     row.n_sessions = pl.n_sessions ?? '';
     row.total_play_sec = pl.total_play_sec != null ? Math.round(Number(pl.total_play_sec) * 10) / 10 : '';
     row.mean_cpm = pl.mean_cpm != null ? Math.round(Number(pl.mean_cpm) * 10) / 10 : '';

@@ -43,7 +43,7 @@ async function overview() {
     total_play_sec: r.total_play_sec,
     prestart_sec: r.prestart_sec,
     diagnosis_sec: r.diagnosis_sec,
-    free_play_sec: r.free_play_sec,
+    free_play_sec: r.free_play_sec, post_survey_play_sec: r.post_survey_play_sec, post_survey_sessions: r.post_survey_sessions,
     n_resumes: r.n_resumes,
     assigned_type: r.assigned_type,
     rediagnosed: r.rediagnosed, final_type: r.final_type, type_changed: r.type_changed,
