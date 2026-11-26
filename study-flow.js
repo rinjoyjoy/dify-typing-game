@@ -15,7 +15,7 @@
   const REQUIRED_PLAY_MS = 10 * 60 * 1000;  // 全群共通のプレイ：初回のスタートから10分
   const MAX_PLAY_MS = REQUIRED_PLAY_MS;     // 10分たったら、アンケートを送信するまで新しいプレイは始められない
   const EXTRA_PLAY_MS = 10 * 60 * 1000;     // アンケート送信後の任意の追加プレイ：最大10分（最初の追加プレイの開始から）
-  const ITEMS_VERSION = '2026-11-26c';
+  const ITEMS_VERSION = '2026-11-26d';
 
   const KEYS = {
     events: 'gtp_study_events',
