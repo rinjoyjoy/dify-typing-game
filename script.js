@@ -1209,6 +1209,19 @@ function aggregateItemRatings(runs) {
   };
 }
 
+// 何も答えずに会話を終えたとき：6タイプから均等にランダムで1つ選ぶ（得点はすべて中央の50）
+function randomNoInputResult() {
+  const primaryType = HEXAD_ORDER[Math.floor(Math.random() * HEXAD_ORDER.length)];
+  const scores = {};
+  HEXAD_ORDER.forEach((t) => { scores[t] = 50; });
+  return {
+    primaryType,
+    scores,
+    tiedTypes: HEXAD_ORDER.slice(),
+    rationale: '会話の手がかりがなかったため、タイプをランダムに決めました。',
+    method: 'random_no_input',
+  };
+}
 // AIの判定がすべて失敗したときの予備：ユーザーの発言のキーワードから簡易判定する
 function keywordFallbackResult() {
   // AIの質問文に含まれる語句（「目標」「達成」など）で達成者に偏らないよう、ユーザーの発言だけを集計する
@@ -1239,6 +1252,16 @@ async function runFinalClassification() {
   isClassifying = true;
   showScreen('screen-analyzing');
   try {
+    // ユーザーが何も答えずに会話を終えた場合は、AIに推定させず、6タイプから均等にランダムで決める
+    if (!getUserChatText().trim()) {
+      const result = randomNoInputResult();
+      $('#result-fallback-note').style.display = 'none';
+      appState.hexadResult = result;
+      localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
+      renderResult(result);
+      showScreen('screen-result');
+      return;
+    }
     const prompt = buildItemRatingPrompt(getUserChatText(), $('#chat-messages').innerText || '');
     const results = await Promise.all(Array.from({ length: CLASSIFY_RUNS }, () => requestItemRatings(prompt)));
     const runs = results.filter(Boolean);
