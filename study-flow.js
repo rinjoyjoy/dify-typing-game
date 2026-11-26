@@ -1,8 +1,9 @@
 /* 本実験の進行管理（全群共通）
    流れ（修正版アンケート v1 2026-11-16 に準拠）
      番号入力 → T0 はじめの4問（BG1〜4）→ 群ごとの開始準備（AI対話・アンケート・診断なし）
-     → T1 準備直後の質問（ONB1〜4・S1。最初のプレイの前）→ 全群共通のプレイ10分
-     → T2 アンケート（追加プレイを選ぶ前）→ 任意の追加プレイ（最大10分・いつでも終了できる）
+     → T1 診断後の質問（ONB1〜4・S1）。診断の結果画面で「練習の準備へ」を押した直後に出す（診断なし群はT0の直後）
+     → 練習の準備 → 全群共通のプレイ10分 → T2 アンケート（追加プレイを選ぶ前）
+     → 任意の追加プレイ（最大10分・いつでも終了できる・再診断なし）
    - 開始前の手続き・プレイ開始などの時刻を記録する（クリックを横取りして記録するので、各群のスクリプトはほぼ変更不要）
    - アンケートの回答は、記録した時刻・診断結果などと一緒に /api/save-survey へ自動送信する
      （T0・T1 の時点でも途中経過を送る。途中でやめた人の開始前の負担も残すため。分析では参加IDごとに最後の送信を使う）
@@ -14,7 +15,7 @@
   const REQUIRED_PLAY_MS = 10 * 60 * 1000;  // 全群共通のプレイ：初回のスタートから10分
   const MAX_PLAY_MS = REQUIRED_PLAY_MS;     // 10分たったら、アンケートを送信するまで新しいプレイは始められない
   const EXTRA_PLAY_MS = 10 * 60 * 1000;     // アンケート送信後の任意の追加プレイ：最大10分（最初の追加プレイの開始から）
-  const ITEMS_VERSION = '2026-11-26b';
+  const ITEMS_VERSION = '2026-11-26c';
 
   const KEYS = {
     events: 'gtp_study_events',
@@ -114,9 +115,11 @@
           save(KEYS.onboardingAnswers, { ...appState.answers });
         }
         break;
-      case 'btn-goto-setup':         // 診断結果を見て、練習の準備へ
+      case 'btn-goto-setup':         // 診断結果を見て、練習の準備へ → その前に診断後の質問（T1）
         mark('onboardingEnd');
         snapshotChat();
+        // 各群のスクリプトが練習の準備画面に切り替えた後に開く（閉じると準備画面に戻る）
+        if (!isSubmitted() && !stageDone('T1')) setTimeout(() => openStage('T1'), 0);
         break;
       case 'btn-start-game':
       case 'btn-play-again':
@@ -372,7 +375,7 @@
 
   function visibleItems(section) {
     const P = items();
-    return section.items.filter((it) => P.isVisible(it, draft.answers));
+    return section.items.filter((it) => P.isVisible(it, draft.answers, participant().group));
   }
 
   function radioRow(it, opts, cls) {
@@ -395,7 +398,7 @@
         <div class="likert ${it.type === 'likert7' ? 'likert7' : 'likert5'}">${nums.map((o) => `
           <label><input type="radio" name="${it.id}" value="${o.value}"${String(v) === o.value ? ' checked' : ''}><b class="lk-n">${o.n}</b><span>${esc(o.label)}</span></label>`).join('')}
         </div>
-        ${radioRow(it, extra, 'choice-list likert-extra')}</div>`;
+        ${extra.length ? radioRow(it, extra, 'choice-list likert-extra') : ''}</div>`;
     }
     if (it.type === 'choice') {
       return `<div class="survey-item ps-item" data-id="${it.id}">${head}${radioRow(it, it.options, 'choice-list')}</div>`;
@@ -458,12 +461,12 @@
     const prev = qs('#ps-prev', sec);
     if (prev) prev.addEventListener('click', () => { draft.pages[stage] -= 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); });
     qs('#ps-next', sec).addEventListener('click', () => {
-      // 回答は原則必須（記述式など optional の設問だけ空欄で進める）。判断できない場合は「判断できない」を選んでもらう
+      // 回答は原則必須（記述式など optional の設問だけ空欄で進める）。S1 だけは「判断できない」を選べる
       const missing = vis.filter((it) => !it.optional && !String(draft.answers[it.id] ?? '').trim());
       if (missing.length) {
         missing.forEach((it) => { const row = sec.querySelector(`.ps-item[data-id="${it.id}"]`); if (row) row.classList.add('missing'); });
         const err = qs('#ps-error', sec);
-        const hasDk = missing.some((it) => it.type === 'likert5' || it.type === 'likert7' || (it.options || []).some((o) => o.value === 'DK'));
+        const hasDk = missing.some((it) => P.optionsOf(it).some((o) => o.value === 'DK'));
         err.textContent = `未回答の質問が ${missing.length} 件あります（赤枠の質問）。${hasDk ? '判断できない場合は「判断できない」を選んでください。' : ''}`;
         err.style.display = 'block';
         const first = sec.querySelector('.ps-item.missing');
@@ -480,20 +483,16 @@
     mark(stage === 'T0' ? 't0Submit' : 't1Submit');
     saveDraft();
     postPayload(buildPayload(stage)); // 途中経過（失敗しても先へ進める。最後の送信にすべて含まれる）
-    if (stage === 'T0') { closeSurvey(); return; }
-    // T1：回答後、全群共通の10分のプレイへ
-    sec.innerHTML = `
-      <div class="card center ps-card">
-        <h2>ありがとうございました</h2>
-        <p class="lead">ここから、全員共通のタイピングを<strong>約10分</strong>行います。<br>画面上部に残り時間が表示されます。</p>
-        <p><button type="button" id="ps-go-play" class="btn btn-primary">タイピングを始める</button></p>
-      </div>`;
-    qs('#ps-go-play', sec).addEventListener('click', () => {
-      closeSurvey();
-      const start = document.getElementById('btn-start-game');
-      if (start) start.click();
-    });
+    if (stage === 'T0' && hasNoDiagnosis()) {
+      // 診断なし群：はじめの4問のすぐ後に、診断後の質問（T1）
+      surveyOpen = false;
+      openStage('T1');
+      return;
+    }
+    // T0（診断のある群）→ 診断へ。T1 → 練習の準備画面へ（ここから全群共通の10分のプレイ）
+    closeSurvey();
   }
+  function hasNoDiagnosis() { return participant().group === 'C'; }
 
   function answerValue(it, v) {
     if (v === undefined || v === null || String(v).trim() === '') return undefined;
@@ -509,7 +508,7 @@
     const onbHex = stage === 'T2' ? onboardingHexAnswers() : null;
     const asked = new Set(askedSections(stage).flatMap((sec) => sec.items.map((it) => it.id)));
     P.ALL_ITEMS.forEach((it) => {
-      if (!asked.has(it.id) || !P.isVisible(it, draft.answers)) return;
+      if (!asked.has(it.id) || !P.isVisible(it, draft.answers, group)) return;
       const v = answerValue(it, draft.answers[it.id]);
       if (v !== undefined) answers[it.id] = v;
     });
@@ -609,7 +608,7 @@
     qs('#btn-finish', sec).addEventListener('click', () => renderEnd(sec));
   }
 
-  // 終了：お礼・研究の説明・（任意）AIでタイプ診断してみる
+  // 終了：お礼・研究の説明（追加プレイ・終了後に再診断はしない）
   function openEnd() {
     surveyOpen = true;
     currentStage = null;
@@ -628,14 +627,7 @@
           <p>この研究では、ゲームを始める前の「タイプ診断」のやり方（AIとの対話・アンケート・診断なし）によって、ゲームの始めやすさや楽しさがどう変わるかを調べています。参加者によって、診断のやり方が異なります。</p>
           <p><strong>結果に影響するため、これから参加する人には、ゲームやアンケートの内容を話さないようお願いします。</strong></p>
         </div>
-        <div class="ps-after">
-          <h3>AIでタイプ診断してみる（任意）</h3>
-          <p>AIとの短い対話で、あなたのタイプを診断します。診断結果に合わせた画面で、続けて遊べます。研究のデータはすでに送信済みなので、ここからは自由に試してください（研究データには含まれません）。</p>
-          <button type="button" id="btn-ai-trial-done" class="btn btn-secondary">AIでタイプ診断する</button>
-        </div>
       </div>`;
-    const ab = sec.querySelector('#btn-ai-trial-done');
-    if (ab) ab.addEventListener('click', () => startAiTrial());
   }
 
   // 前回、送信に失敗したまま閉じていた場合は、次に開いたときに自動で送り直す
@@ -742,7 +734,8 @@
     if (!ev.t0Submit) { openStage('T0'); return; }
     if (ev.surveyStart || playGated()) { openStage('T2'); return; }
     clickResume();
-    if (ev.t1Start && !ev.t1Submit) openStage('T1');
+    // 診断が終わっている（診断なし群はT0が済んでいる）のに、診断後の質問がまだなら出す
+    if (!ev.t1Submit && (hasNoDiagnosis() || ev.onboardingEnd || ev.t1Start)) openStage('T1');
   }
 
   // 各群のスクリプトが読み込まれた後に呼ぶ（index.html）。

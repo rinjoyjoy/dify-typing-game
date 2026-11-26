@@ -294,7 +294,7 @@
     return ids.map((id) => ({ id, label: LABEL[id], values: vals(rows.filter((r) => r.group === id), key) }));
   }
 
-  // 5件法（1〜5）の項目・得点のカード。値が数値でない回答（判断できない・該当しない・比較できない・空欄）は含めない
+  // 5件法（1〜5）の項目・得点のカード。値が数値でない回答（判断できない・比較できない・空欄）は含めない
   function likertCard(id, rows, key, title, word, pairs, lowerIsBetter, mainPair, note, ids = ['A', 'B', 'C']) {
     const series = seriesOf(rows, key, ids);
     const usePairs = pairs.filter((p) => ids.includes(p[0]) && ids.includes(p[1]));
@@ -350,15 +350,15 @@
 
     sections.push({ id: 'h1', title: '仮説1 開始前の負担', cards: [
       likertCard('onb', rows, 'ONB', 'ONB1〜3 主観的開始負担（3項目平均、低いほど負担が軽い）', '主観的開始負担', [['A', 'B']], true, ['A', 'B'],
-        'ONB1〜3 が全て有効な人だけ平均しています（判断できない・該当しないが1つでもあれば除外）。診断なし群は項目別に扱うため、ここでは比べていません（下の項目別カード）。', ['A', 'B']),
+        'ONB1〜3 の3問すべてに答えた人の平均です。診断なし群には ONB3 を出していないため、ここでは比べていません（下の項目別カード）。', ['A', 'B']),
       ...itemCards(rows, ['ONB1', 'ONB2', 'ONB3'], { word: () => '負担', pairs: pairs3, lowerIsBetter: true,
-        note: '項目別（全群）。ONB3 の「該当しない」は得点に置き換えず、除いています。' }),
+        note: '項目別。ONB3 は診断なし群には出していません（開始前の質問や対話がないため）。' }),
       likertCard('onb4', rows, 'ONB4', `ONB4 ${itemText('ONB4')}（開始前の中断意向・単項目）`, '中断意向', pairs3, true, ['A', 'B'],
         '実際の離脱率とは区別して扱います。'),
       secCard('prep', all, 'prep_sec', ['A', 'B', 'C'], '開始準備の時間（はじめの4問の回答後 → スタートを押すまで）', '開始準備の時間', true,
         'アンケートの主観に頼らない、客観的な負担の指標です。はじめの4問と準備直後の質問の回答時間は含みません。'),
       secCard('diag', all, 'diagnosis_sec', ['A', 'B'], '診断にかかった時間（診断開始 → 練習の準備へ）', '診断にかかった時間', true),
-      likertCard('s1', rows, 'S1', 'S1 開始前の過程そのものを楽しめた（1〜5）', '開始前の楽しさ', pairs3, false, ['A', 'B'], '補足の1項目です。開始時負担の平均には含めません。'),
+      likertCard('s1', rows, 'S1', 'S1 開始前の過程そのものを楽しめた（1〜5）', '開始前の楽しさ', pairs3, false, ['A', 'B'], '補足の1項目です。開始時負担の平均には含めません。「判断できない」（診断なし群は開始前の過程がほぼないため、この設問だけ選べる）は除いています。'),
     ] });
 
     // 精度
@@ -463,6 +463,7 @@
       <li><strong>複数の2群比較</strong>：Holm法で p値を補正。</li>
       <li><strong>タイプの一致率</strong>：偶然に当たる確率（1位 1/6、上位2位 2/6）との片側の二項検定。</li>
       <li><strong>順位相関</strong>：1人ずつ、AIの6タイプ得点と本人の動機づけ傾向12問得点のSpearman相関。プラスの人の割合を符号検定。</li>
+      <li><strong>得点外の回答</strong>：S1 の「判断できない」と RET4 の「比較できない」は、得点に置き換えず除いています。ONB1〜3・RET1〜3 の平均と動機づけ傾向の方向別平均は、対象の項目がすべて数値の人だけで計算します。</li>
       <li><strong>グラフ</strong>：1人＝1点、縦線は中央値。点にマウスを乗せると値が出ます。</li>
       <li>論文に載せる最終的な数値は、CSVで確認したうえで使ってください。</li></ul></div>`;
 

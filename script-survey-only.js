@@ -933,7 +933,7 @@ function initWelcomeScreen() {
    本実験では、アンケート群の診断に本研究用の動機づけ傾向12問（Hexadを参考。修正版アンケートの HEX01〜12）を使う。
    設問文・選択肢は事後アンケートと共通（post-survey-items.js）。ここでの回答は、事後アンケートの
    HEX01〜12 の回答としてそのまま使うため、アンケート群は事後アンケートで同じ質問に答えない。
-   「判断できない」（DK）も選べる。DK はタイプの判定では、その項目を除いて計算する。
+   （旧版の「判断できない」（DK）の回答が残っていた場合は、その項目を除いて計算する）
    ============================================================ */
 
 const ONBOARD_ITEMS = PostSurveyItems.ALL_ITEMS
@@ -944,7 +944,6 @@ function renderSurveyForm() {
   const formEl = $('#survey-form');
   appState.answers = {};
   const labels = PostSurveyItems.LIKERT7;
-  const dk = PostSurveyItems.DK;
 
   formEl.innerHTML = ONBOARD_ITEMS.map((item, idx) => `
     <div class="survey-item onb-item">
@@ -954,9 +953,6 @@ function renderSurveyForm() {
           <button type="button" class="likert-btn" data-value="${i + 1}"><b>${i + 1}</b><span>${escapeHtml(lbl)}</span></button>
         `).join('')}
       </div>
-      <div class="likert-group onb-dk" data-qid="${item.id}">
-        <button type="button" class="likert-btn likert-dk" data-value="${dk.value}">${escapeHtml(dk.label)}</button>
-      </div>
     </div>
   `).join('');
 
@@ -965,7 +961,7 @@ function renderSurveyForm() {
       const qid = btn.closest('.likert-group').dataset.qid;
       formEl.querySelectorAll(`.likert-group[data-qid="${qid}"] .likert-btn`).forEach((b) => b.classList.remove('selected'));
       btn.classList.add('selected');
-      appState.answers[qid] = btn.dataset.value === dk.value ? dk.value : Number(btn.dataset.value);
+      appState.answers[qid] = Number(btn.dataset.value);
       checkSurveyComplete();
     });
   });
