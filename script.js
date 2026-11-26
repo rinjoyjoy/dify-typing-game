@@ -959,9 +959,49 @@ function renderSurvey() {
   $('#chat-messages').innerHTML = '';
   conversationId = "";
   // 最初の質問はタイプを連想させる例を出さず、自由に話してもらう（AIが答えに合わせて次の質問を選ぶ）
-  appendChatMessage('ai', 'こんにちは！あなたに合ったタイピング練習にするため、ゲームやふだんのことについて少しだけお話を聞かせてください（4〜5回のやりとりで終わります）。\n選択肢が出たら、ボタンを押して答えても、自由に書いて答えてもかまいません。\nまずは、最近ハマっているゲームや趣味（ゲーム以外でもOK）と、それのどんなところが楽しいかを教えてください。');
+  appendChatMessage('ai', 'こんにちは！あなたに合ったタイピング練習にするため、ゲームやふだんのことについて少しだけお話を聞かせてください（6〜7回ほどのやりとりで終わります）。\n選択肢が出たら、ボタンを押して答えても、自由に書いて答えてもかまいません。\nまずは、最近ハマっているゲームや趣味（ゲーム以外でもOK）と、それのどんなところが楽しいかを教えてください。');
   $('#chat-input').value = '';
   $('#btn-chat-send').disabled = false;
+}
+
+// AIの発言から選択肢を取り出す（appendChatMessage で使う）
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
+function normalizeChoiceLine(line) {
+  let l = String(line)
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/([0-9])\uFE0F?\u20E3/g, '$1.') // 1️⃣
+    .replace(/[①-⑩]/g, (c) => `${CIRCLED.indexOf(c) + 1}.`)
+    .trim();
+  l = l.replace(/^(?:[-*・•>]\s*)+/, '').replace(/^\*\*/, '').trim();
+  l = l.replace(/^[(（]\s*([0-9]+)\s*[)）]/, '$1.');
+  return l;
+}
+const CHOICE_LINE_RE = /^([0-9]{1,2})\s*[.、)）．:：]\s*(.+)$/;
+const INLINE_CHOICE_RE = /([0-9]{1,2})\s*[.、)）．]\s*(.+?)(?=\s*[0-9]{1,2}\s*[.、)）．]|$)/g;
+function cleanChoiceText(t) {
+  return t.replace(/\*\*/g, '').replace(/^[「『]|[」』]$/g, '').trim();
+}
+function parseChatChoices(text) {
+  const mainText = [];
+  const buttons = [];
+  String(text).split('\n').forEach((raw) => {
+    let line = normalizeChoiceLine(raw);
+    // 質問文と同じ行に「1. 〜 2. 〜」が続く場合は、「1.」の前までを本文にする
+    const lead = line.match(/^(.*?[\s　。？?！!：:])(1\s*[.、)）．].*2\s*[.、)）．].*)$/);
+    if (lead && !/^[0-9]/.test(line)) { mainText.push(lead[1].trim()); line = lead[2]; }
+    const inline = [...line.matchAll(INLINE_CHOICE_RE)];
+    if (inline.length > 1 && /^[0-9]/.test(line)) {
+      inline.forEach((m) => buttons.push(cleanChoiceText(m[2])));
+      return;
+    }
+    const m = line.match(CHOICE_LINE_RE);
+    if (m && cleanChoiceText(m[2])) buttons.push(cleanChoiceText(m[2]));
+    else mainText.push(raw);
+  });
+  if (buttons.length < 2) return { mainText: String(text).split('\n'), buttons: [] };
+  // 本文の末尾の空行を除く
+  while (mainText.length && !mainText[mainText.length - 1].trim()) mainText.pop();
+  return { mainText, buttons };
 }
 
 function appendChatMessage(role, text) {
@@ -976,28 +1016,11 @@ function appendChatMessage(role, text) {
     let hasChoices = false;
     let choicesHtml = '';
     
-    // 選択肢の行（例:「1. 〜」）をボタンにする。行頭の空白・全角数字・「1)」「1）」「1．」の形にも対応する
-    const CHOICE_LINE = /^\s*([0-9０-９]+)\s*[\.\、\)）．]\s*(.+)$/;
-    if (text.split('\n').some((l) => CHOICE_LINE.test(l))) {
-      const lines = text.split('\n');
-      let mainText = [];
-      let buttons = [];
-      
-      lines.forEach(line => {
-        const m = line.match(CHOICE_LINE);
-        if (m) {
-          buttons.push(m[2].trim());
-        } else {
-          const inlineMatches = [...line.matchAll(/(\d+)[\.\、]\s*([^1-9]+)(?=\d+[\.\、]|$)/g)];
-          if (inlineMatches.length > 1) {
-            inlineMatches.forEach(im => buttons.push(im[2].trim()));
-          } else {
-            mainText.push(line);
-          }
-        }
-      });
-      
-      if (buttons.length > 0) {
+    // 選択肢の行（例:「1. 〜」）をボタンにする。AIの書き方の揺れ（全角数字・「1)」「1）」「1．」「(1)」「①」「1️⃣」、
+    // 行頭の「- 」「・」、太字の「**」、1行に並べた「1. 〜 2. 〜」）にも対応する。2つ以上見つかったときだけボタンにする
+    const { mainText, buttons } = parseChatChoices(text);
+    {
+      if (buttons.length >= 2) {
         msgDiv.innerHTML = mainText.join('<br>') + '<div class="chat-choices">';
         const choicesContainer = document.createElement('div');
         choicesContainer.className = 'chat-choices';
@@ -1086,7 +1109,7 @@ function getUserChatText() {
 
 /* ============================================================
    AI対話の判定（精度重視）
-   会話の記録から「この人が事後アンケートの動機づけ傾向12問（HEX01〜12、Hexadを参考にした本研究用項目）に
+   会話の記録から「この人が事後アンケートの動機づけ傾向12問（HEX01〜12、Hexad-12 の12問に対応する日本語文）に
    答えたら何点をつけるか（1〜7）」をAIに推定させ、同じ計算（方向ごとに2項目の平均）でタイプを決める。
    ・事後アンケートの12問と物差しがそろうので、1問ごとのずれや6方向の順位相関で整合を検証できる
    ・同じ会話で3回同時に推定して平均し、1回ごとのばらつきを減らす
@@ -1186,6 +1209,19 @@ function aggregateItemRatings(runs) {
   };
 }
 
+// 何も答えずに会話を終えたとき：6タイプから均等にランダムで1つ選ぶ（得点はすべて中央の50）
+function randomNoInputResult() {
+  const primaryType = HEXAD_ORDER[Math.floor(Math.random() * HEXAD_ORDER.length)];
+  const scores = {};
+  HEXAD_ORDER.forEach((t) => { scores[t] = 50; });
+  return {
+    primaryType,
+    scores,
+    tiedTypes: HEXAD_ORDER.slice(),
+    rationale: '会話の手がかりがなかったため、タイプをランダムに決めました。',
+    method: 'random_no_input',
+  };
+}
 // AIの判定がすべて失敗したときの予備：ユーザーの発言のキーワードから簡易判定する
 function keywordFallbackResult() {
   // AIの質問文に含まれる語句（「目標」「達成」など）で達成者に偏らないよう、ユーザーの発言だけを集計する
@@ -1216,6 +1252,16 @@ async function runFinalClassification() {
   isClassifying = true;
   showScreen('screen-analyzing');
   try {
+    // ユーザーが何も答えずに会話を終えた場合は、AIに推定させず、6タイプから均等にランダムで決める
+    if (!getUserChatText().trim()) {
+      const result = randomNoInputResult();
+      $('#result-fallback-note').style.display = 'none';
+      appState.hexadResult = result;
+      localStorage.setItem(STORAGE_KEYS.hexadResult, JSON.stringify(result));
+      renderResult(result);
+      showScreen('screen-result');
+      return;
+    }
     const prompt = buildItemRatingPrompt(getUserChatText(), $('#chat-messages').innerText || '');
     const results = await Promise.all(Array.from({ length: CLASSIFY_RUNS }, () => requestItemRatings(prompt)));
     const runs = results.filter(Boolean);

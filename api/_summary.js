@@ -163,7 +163,7 @@ async function summaryRows() {
     const cutoff = rediagAt && (!submittedAt || rediagAt < submittedAt) ? rediagAt : submittedAt;
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
-    row.classify_method = (hr && hr.method) || p.classifyMethod || null; // llm_items＝AIが12項目を推定（3回平均）、survey＝Hexad-12に回答
+    row.classify_method = (hr && hr.method) || p.classifyMethod || null; // llm_items＝AIが12項目を推定（3回平均）、survey＝12問に回答、random_no_input＝AI対話で何も答えずに終えたためランダム、keyword_fallback＝AIの判定失敗時のキーワード判定
     row.hex_source = p.hexSource || 'post_survey'; // onboarding＝アンケート群が最初の診断で答えたHexad-12（診断と基準が同じ回答）
     HEXAD_ORDER.forEach((t) => { row[`assigned_score_${t}`] = hr && hr.scores ? hr.scores[t] ?? '' : ''; });
     const hexComplete = HEXAD_ORDER.every((t) => typeof hexMeans[t] === 'number');
