@@ -711,3 +711,33 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
   .likert7, .onb-likert { flex-wrap: wrap; }
   .likert7 label, .onb-likert .likert-btn { flex: 1 1 22%; }
 }
+
+/* 最初の画面（参加者番号の入力）2026-11-26 整理 */
+.entry-card { max-width: 640px; margin: 0 auto; }
+.entry-head { margin-bottom: 20px; }
+.entry-eyebrow { margin: 0 0 4px; font-size: 0.78rem; letter-spacing: 0.08em; color: var(--text-muted); }
+.entry-head h1 { margin: 0 0 10px; }
+.entry-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+.entry-meta span { padding: 3px 10px; border-radius: 999px; background: var(--page); }
+.entry-meta strong { color: var(--text-primary); }
+.entry-flow { margin: 0 0 22px; padding: 16px 18px 12px; border-radius: 8px; background: var(--page); }
+.entry-flow-title { margin: 0 0 10px; font-size: 0.95rem; }
+.tl { list-style: none; margin: 0 0 8px; padding: 0; counter-reset: tl; }
+.tl li { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0 9px 34px; counter-increment: tl; }
+.tl li + li { border-top: 1px solid var(--gridline); }
+.tl li::before { content: counter(tl); position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: #fff; background: var(--type-achiever); }
+.tl li.tl-diag::before, .tl li.tl-play::before { background: var(--text-secondary); }
+.tl li.tl-opt::before { background: transparent; color: var(--text-secondary); border: 1.5px dashed var(--text-muted); }
+.tl-name { display: flex; flex-direction: column; font-weight: 600; font-size: 0.95rem; line-height: 1.35; }
+.tl-name small { font-weight: 400; font-size: 0.78rem; color: var(--text-muted); }
+.tl-time { flex: 0 0 auto; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.tl li.tl-play .tl-time { color: var(--text-primary); }
+.entry-flow .howto summary { cursor: pointer; font-size: 0.85rem; color: var(--text-secondary); padding: 4px 0; }
+.entry-flow .howto ul { margin: 6px 0 4px; padding-left: 1.2em; font-size: 0.85rem; line-height: 1.7; color: var(--text-secondary); }
+.entry-form label { display: block; font-weight: 700; margin-bottom: 2px; }
+.entry-form .hint { margin: 0 0 8px; }
+.entry-input-row { display: flex; gap: 10px; }
+.entry-input-row input { flex: 1; min-width: 0; padding: 10px 12px; font-size: 1.05rem; border-radius: 6px; border: 1.5px solid var(--baseline); background: var(--page); color: var(--text-primary); font-family: inherit; }
+.entry-input-row input:focus { outline: none; border-color: var(--type-achiever); }
+.entry-input-row .btn { flex: 0 0 auto; }
+#pid-error { margin-top: 8px; }

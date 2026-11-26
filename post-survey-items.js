@@ -5,7 +5,7 @@
 
    回答時点（stage）
      T0 … 番号入力の直後、群ごとの手続き（診断など）の前（BG1〜4）
-     T1 … 群ごとの開始準備を終えた直後、最初のプレイの前（ONB1〜4・S1）
+     T1 … 群ごとの開始準備（診断）を終えた直後、練習の準備画面の前（ONB1〜4・S1）。診断なし群はT0の直後
      T2 … 全群共通の最初の10分のプレイの直後、追加プレイを選ぶ前（それ以外すべて）
 
    群の記号に注意：修正版の資料は A＝診断なし・B＝アンケート・C＝AI対話 だが、
@@ -14,7 +14,10 @@
    回答は原則必須（記述式の Q1〜3 は任意）。そのため共通教示の「答えたくない設問は空欄のままでかまいません」は削除している。
 
    回答の値：5件法・7件法は数値（1〜5／1〜7）。得点外の選択肢は次の文字列で保存する。
-     DK＝判断できない、NA＝該当しない（ONB3）、NC＝比較できない（RET4） */
+     DK＝判断できない（群の条件で答えにくくなる S1 だけに出す：診断なし群は開始前の過程がほぼない）
+     NC＝比較できない（RET4。ツール経験の有無によるもので群とは関係ない）
+   ONB3（開始前の質問ややりとりの負担）は、「該当しない」が群によるもの（診断なし群には質問や対話がない）なので、
+   選択肢を置かず、診断なし群（コードの C）には設問自体を出さない。 */
 (function (root, factory) {
   const mod = factory();
   if (typeof module === 'object' && module.exports) {
@@ -29,13 +32,12 @@
 
   // 得点外の選択肢
   const DK = { value: 'DK', label: '判断できない' };
-  const NA_ONB3 = { value: 'NA', label: '該当しない（開始前の質問や対話はなかった）' };
   const NC_RET4 = { value: 'NC', label: '比較できない（ほかのタイピング練習ツールを使ったことがない等）' };
-  const SPECIAL_VALUES = ['DK', 'NA', 'NC'];
+  const SPECIAL_VALUES = ['DK', 'NA', 'NC']; // NA は旧版（2026-11-26 以前）の ONB3「該当しない」
 
   // 共通教示・各時点の教示
   const INSTRUCTIONS = {
-    common: '各設問について、あなたの感じ方に最も近い回答を1つ選んでください。正解や不正解はありません。判断できない場合は「判断できない」を選んでください。氏名、学籍番号、連絡先など、個人を特定できる情報は記入しないでください。',
+    common: '各設問について、あなたの感じ方に最も近い回答を1つ選んでください。正解や不正解はありません。氏名、学籍番号、連絡先など、個人を特定できる情報は記入しないでください。',
     T1: 'いま終えた、ゲームを始めるまでの準備についてお答えください。ここでの準備とは、ゲームの画面内で行った説明の確認、設定、質問への回答や対話などを指します。研究参加の説明や、このアンケートへの回答時間は含めません。',
     T2: '全員共通の最初の10分間のゲームについてお答えください。追加で遊ぶかどうかを選ぶ前に回答してください。',
     rediagnosis: 'ここからは、今後このゲームを利用するときのことを想像してお答えください。プレイの途中に、好みを見直すための短い質問が表示され、その回答を基にゲームの演出や設定が更新される機能を想定してください。今回は、その機能を体験していなくてもかまいません。',
@@ -45,7 +47,7 @@
 
   const STAGES = {
     T0: { label: 'はじめの質問', submitLabel: '回答して次へ進む' },
-    T1: { label: '準備についての質問', submitLabel: '回答してゲームへ進む' },
+    T1: { label: '診断後の質問', submitLabel: '回答して練習の準備へ進む' },
     T2: { label: 'アンケート', submitLabel: '回答を送信する' },
   };
 
@@ -75,9 +77,9 @@
       items: [
         { id: 'ONB1', scale: 'ONB', type: 'likert5', text: 'ゲーム開始までの手続きは面倒だと感じた' },
         { id: 'ONB2', scale: 'ONB', type: 'likert5', text: 'ゲーム開始までにかかる時間が長いと感じた' },
-        { id: 'ONB3', scale: 'ONB', type: 'likert5', text: '開始前の質問ややりとりに答えることが負担だった', extraOptions: [NA_ONB3] },
+        { id: 'ONB3', scale: 'ONB', type: 'likert5', text: '開始前の質問ややりとりに答えることが負担だった', hideForGroups: ['C'] },
         { id: 'ONB4', scale: 'ONB_QUIT', type: 'likert5', text: '開始前の段階で、途中でページを閉じたくなった' },
-        { id: 'S1', scale: 'SUP', type: 'likert5', text: '開始前の過程そのものを楽しめた' },
+        { id: 'S1', scale: 'SUP', type: 'likert5', text: '開始前の過程そのものを楽しめた', allowDK: true },
       ],
     },
 
@@ -110,7 +112,7 @@
         { id: 'S3', scale: 'SUP', type: 'choice', text: 'このゲームを使うとしたら、どのくらいの頻度で使いたいですか',
           options: [
             { value: 'daily', label: '毎日' }, { value: 'few_week', label: '週に数回' }, { value: 'weekly', label: '週に1回' },
-            { value: 'few_month', label: '月に数回' }, { value: 'rarely', label: 'ほとんど使わない' }, DK,
+            { value: 'few_month', label: '月に数回' }, { value: 'rarely', label: 'ほとんど使わない' },
           ] },
       ],
     },
@@ -127,7 +129,7 @@
           note: '最も望ましいものを1つ選んでください。',
           options: [
             { value: 'every_play', label: '毎プレイ' }, { value: 'few_plays', label: '数回ごと' }, { value: 'weekly', label: '1週間ごと' },
-            { value: 'monthly', label: '1か月ごと' }, { value: 'none', label: '不要' }, { value: 'on_demand', label: '自分が希望したときだけ' }, DK,
+            { value: 'monthly', label: '1か月ごと' }, { value: 'none', label: '不要' }, { value: 'on_demand', label: '自分が希望したときだけ' },
           ] },
       ],
     },
@@ -168,14 +170,16 @@
 
   // 設問の選択肢（数値＋得点外）を、表示用の {value, label} の配列で返す
   function optionsOf(item) {
-    if (item.type === 'likert5') return [...LIKERT5.map((l, i) => ({ value: String(i + 1), label: `${i + 1} ${l}` })), DK, ...(item.extraOptions || [])];
-    if (item.type === 'likert7') return [...LIKERT7.map((l, i) => ({ value: String(i + 1), label: `${i + 1} ${l}` })), DK, ...(item.extraOptions || [])];
+    const extra = [...(item.allowDK ? [DK] : []), ...(item.extraOptions || [])];
+    if (item.type === 'likert5') return [...LIKERT5.map((l, i) => ({ value: String(i + 1), label: `${i + 1} ${l}` })), ...extra];
+    if (item.type === 'likert7') return [...LIKERT7.map((l, i) => ({ value: String(i + 1), label: `${i + 1} ${l}` })), ...extra];
     return item.options || [];
   }
+  const OLD_LABELS = { DK: '判断できない', NA: '該当しない', NC: '比較できない' }; // 旧版の回答の表示用
   function labelOf(item, value) {
     if (value === undefined || value === null || value === '') return '';
     const o = optionsOf(item).find((x) => x.value === String(value));
-    return o ? o.label : String(value);
+    return o ? o.label : (OLD_LABELS[value] || String(value));
   }
   // 得点として使える値か（得点外の DK・NA・NC や空欄は false）
   function isScored(v) {
@@ -193,7 +197,9 @@
     { id: 'RET_mean', items: ['RET1', 'RET2', 'RET3'], requireAll: true },
   ];
 
-  function isVisible(item, answers) {
+  // group：参加者の群（コード上の記号）。hideForGroups に含まれる群には出さない
+  function isVisible(item, answers, group) {
+    if (item.hideForGroups && group && item.hideForGroups.includes(group)) return false;
     if (!item.showIf) return true;
     return answers[item.showIf.item] === item.showIf.equals;
   }
