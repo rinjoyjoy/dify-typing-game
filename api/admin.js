@@ -1,5 +1,7 @@
 const { query } = require('./db');
 const { summaryRows, safeEqual, HEXAD_ORDER } = require('./_summary');
+const PostSurvey = require('../post-survey-items.js');
+const ITEM_IDS = PostSurvey.ALL_ITEMS.filter((it) => it.type !== 'text').map((it) => it.id);
 
 /* 研究者用ページ（admin.html）から呼ぶ管理用API。合言葉は RESEARCH_EXPORT_KEY（CSVダウンロードと同じ）
    GET  /api/admin?key=…                         … 件数・進捗・群ごとの集計・参加者一覧
@@ -29,7 +31,9 @@ function rate(rows, key) {
 }
 
 async function overview() {
-  const { rows } = await summaryRows();
+  const { rows: allRows } = await summaryRows();
+  const rows = allRows.filter((r) => r.complete === 1);
+  const partial = allRows.filter((r) => r.complete !== 1); // T0・T1 まで送信して、アンケート（T2）は未回答
   const responded = rows.map((r) => ({
     kind: 'responded',
     response_id: r.response_id,
@@ -41,7 +45,7 @@ async function overview() {
     pid_duplicates: r.pid_duplicates,
     n_sessions: r.n_sessions,
     total_play_sec: r.total_play_sec,
-    prestart_sec: r.prestart_sec,
+    prestart_sec: r.prestart_sec, prep_sec: r.prep_sec,
     diagnosis_sec: r.diagnosis_sec,
     free_play_sec: r.free_play_sec, post_survey_play_sec: r.post_survey_play_sec, post_survey_sessions: r.post_survey_sessions,
     n_resumes: r.n_resumes,
@@ -52,10 +56,10 @@ async function overview() {
     assigned_in_top2: r.assigned_in_top2,
     spearman: r.spearman_assigned_vs_hex,
     ai_item_mae: r.ai_item_mae,
-    ONB: r.ONB_mean, FIT: r.FIT_mean, ENJ: r.ENJ_mean, RET: r.RET_mean, RED: r.RED_mean,
+    ONB: r.ONB_mean, RET: r.RET_mean,
+    ...Object.fromEntries(ITEM_IDS.map((id) => [id, r[id]])), // 項目別の回答（数値、または DK・NA・NC）
     chat_turns: r.chat_turns,
-    S1: r.S1, S2: r.S2, S3: r.S3, S4: r.S4, EXP: r.EXP, CMP1: r.CMP1,
-    n_free_continue: r.n_free_continue, n_games_started: r.n_games_started,
+    n_games_started: r.n_games_started, n_post_survey_games: r.n_post_survey_games,
   }));
 
   // プレイ記録はあるがアンケートが届いていない参加（途中でやめた・回答中）
@@ -70,7 +74,19 @@ async function overview() {
     WHERE participant_id IS NOT NULL OR entry_id IS NOT NULL
     GROUP BY COALESCE(entry_id, 'pid:' || participant_id)
   `)).rows;
-  const unfinished = play
+  const partialRows = partial.map((r) => ({
+    kind: 'unfinished',
+    stage: r.stage,
+    participant_id: r.participant_id,
+    entry_id: r.entry_id,
+    group: r.group,
+    condition: r.condition || CONDITION[r.group] || '',
+    n_sessions: r.n_sessions || 0,
+    total_play_sec: r.total_play_sec !== '' && r.total_play_sec != null ? Math.round(Number(r.total_play_sec)) : null,
+    first_at: r.t_entry || null, last_at: r.submitted_at,
+  }));
+  partialRows.forEach((r) => { if (r.entry_id) respondedKeys.add(String(r.entry_id)); });
+  const unfinished = [...partialRows, ...play
     .filter((p) => !respondedKeys.has(String(p.play_key)) && !(p.entry_id == null && respondedKeys.has(`pid:${p.participant_id}`)))
     .map((p) => ({
       kind: 'unfinished',
@@ -81,15 +97,16 @@ async function overview() {
       n_sessions: p.n_sessions,
       total_play_sec: p.total_play_sec != null ? Math.round(Number(p.total_play_sec)) : null,
       first_at: p.first_at, last_at: p.last_at,
-    }));
+    }))];
 
   // 群ごとの集計（回答済みのみ）
   const groups = ['A', 'B', 'C'].map((g) => {
     const rs = responded.filter((r) => r.group === g);
     return {
       group: g, condition: CONDITION[g], n: rs.length,
-      ONB: avg(rs, 'ONB'), FIT: avg(rs, 'FIT'), ENJ: avg(rs, 'ENJ'), RET: avg(rs, 'RET'), RED: avg(rs, 'RED'),
-      prestart_sec: avg(rs, 'prestart_sec'), diagnosis_sec: avg(rs, 'diagnosis_sec'),
+      ONB: avg(rs, 'ONB'), RET: avg(rs, 'RET'),
+      ENJ1: avg(rs, 'ENJ1'), FIT2: avg(rs, 'FIT2'),
+      prestart_sec: avg(rs, 'prestart_sec'), prep_sec: avg(rs, 'prep_sec'), diagnosis_sec: avg(rs, 'diagnosis_sec'),
       total_play_sec: avg(rs, 'total_play_sec'), free_play_sec: avg(rs, 'free_play_sec'),
       top1_rate: rate(rs, 'assigned_is_top'), top2_rate: rate(rs, 'assigned_in_top2'),
       spearman: avg(rs, 'spearman'), ai_item_mae: avg(rs, 'ai_item_mae'),

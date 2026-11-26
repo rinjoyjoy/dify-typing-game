@@ -1086,9 +1086,9 @@ function getUserChatText() {
 
 /* ============================================================
    AI対話の判定（精度重視）
-   会話の記録から「この人がHexad-12の12問に答えたら何点をつけるか（1〜7）」をAIに推定させ、
-   Hexad-12と同じ計算（タイプごとに2項目の平均）でタイプを決める。
-   ・事後アンケートのHexad-12と物差しがそろうので、1問ごとのずれや6タイプの順位相関で精度を検証できる
+   会話の記録から「この人が事後アンケートの動機づけ傾向12問（HEX01〜12、Hexadを参考にした本研究用項目）に
+   答えたら何点をつけるか（1〜7）」をAIに推定させ、同じ計算（方向ごとに2項目の平均）でタイプを決める。
+   ・事後アンケートの12問と物差しがそろうので、1問ごとのずれや6方向の順位相関で整合を検証できる
    ・同じ会話で3回同時に推定して平均し、1回ごとのばらつきを減らす
    ============================================================ */
 const HEX12_ITEMS = PostSurveyItems.ALL_ITEMS.filter((it) => it.scale === 'HEX');
@@ -1098,8 +1098,8 @@ let isClassifying = false;
 function buildItemRatingPrompt(userText, chatText) {
   const typeLabel = { philanthropist: '慈善家', socialiser: '社交家', freeSpirit: '自由主義者', achiever: '達成者', player: 'プレイヤー', disruptor: '変革者' };
   const itemLines = HEX12_ITEMS.map((it) => `${it.id}（${typeLabel[it.hexadType]}）: ${it.text}`).join('\n');
-  return `あなたはHexadゲーミフィケーションユーザータイプの診断者です。以下の会話を読み、このユーザーが次の12の質問（Hexad-12）に回答したとしたら、それぞれ何点をつけるかを推定してください。
-点数は 1＝まったくそう思わない 〜 7＝とてもそう思う の7段階（整数）です。
+  return `あなたはHexadゲーミフィケーションユーザータイプの診断者です。以下の会話を読み、このユーザーが次の12の質問に回答したとしたら、それぞれ何点をつけるかを推定してください。
+点数は 1＝全く当てはまらない、2＝当てはまらない、3＝あまり当てはまらない、4＝どちらともいえない、5＝やや当てはまる、6＝当てはまる、7＝とても当てはまる の7段階（整数）です。
 
 【12の質問】
 ${itemLines}
@@ -2232,7 +2232,7 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  // 全群共通のプレイ（10分）を終えたら、アンケートへの案内を出す（study-flow.js）
   StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;

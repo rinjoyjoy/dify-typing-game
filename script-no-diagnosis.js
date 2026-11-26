@@ -992,7 +992,7 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  // 全群共通のプレイ（10分）を終えたら、アンケートへの案内を出す（study-flow.js）
   StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;

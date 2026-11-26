@@ -294,15 +294,39 @@
     return ids.map((id) => ({ id, label: LABEL[id], values: vals(rows.filter((r) => r.group === id), key) }));
   }
 
-  function likertCard(id, rows, key, title, word, pairs, lowerIsBetter, mainPair, note) {
-    const series = seriesOf(rows, key);
-    const pw = pairwiseTable(series, pairs);
-    const mi = pairs.findIndex((p) => p[0] === mainPair[0] && p[1] === mainPair[1]);
+  // 5件法（1〜5）の項目・得点のカード。値が数値でない回答（判断できない・該当しない・比較できない・空欄）は含めない
+  function likertCard(id, rows, key, title, word, pairs, lowerIsBetter, mainPair, note, ids = ['A', 'B', 'C']) {
+    const series = seriesOf(rows, key, ids);
+    const usePairs = pairs.filter((p) => ids.includes(p[0]) && ids.includes(p[1]));
+    const pw = pairwiseTable(series, usePairs, { noHolm: usePairs.length < 2 });
+    const mi = usePairs.findIndex((p) => p[0] === mainPair[0] && p[1] === mainPair[1]);
     const t = pw.res[mi].t, p = pw.adj[mi];
     const lead = sentence(series, mainPair[0], mainPair[1], lowerIsBetter, word, t, p);
+    const excluded = PS ? ` 得点外の回答：${ids.map((g) => `${LABEL[g]} ${specialCount(rows.filter((r) => r.group === g), key)}件`).join('・')}。` : '';
     return mkCard(id, title, lead,
-      legendHtml(['A', 'B', 'C']) + dotPlot(series, { min: 1, max: 5, ticks: [1, 2, 3, 4, 5], title }) + kwLine(series) + (note ? `<p class="hint">${note}</p>` : ''),
+      legendHtml(ids) + dotPlot(series, { min: 1, max: 5, ticks: [1, 2, 3, 4, 5], title }) + (ids.length === 3 ? kwLine(series) : '') +
+        `<p class="hint">${note ? note + ' ' : ''}${isItem(key) ? excluded : ''}</p>`,
       pw.html + descTable(series), statusFromP(t, p));
+  }
+  const PS = window.PostSurveyItems || null;
+  const itemOf = (id) => (PS ? PS.ALL_ITEMS.find((it) => it.id === id) : null);
+  const isItem = (id) => !!itemOf(id);
+  const itemText = (id) => { const it = itemOf(id); return it ? it.text : id; };
+  function specialCount(rows, key) { return rows.filter((r) => typeof r[key] === 'string' && PS && PS.SPECIAL_VALUES.includes(r[key])).length; }
+  // 項目ごとのカード（FIT・ENJ・RED は総合平均を主指標にせず、項目別に示す）
+  function itemCards(rows, ids, opts) {
+    return ids.map((id) => likertCard(id.toLowerCase(), rows, id, `${id} ${itemText(id)}`, opts.word(id), opts.pairs, !!opts.lowerIsBetter, ['A', 'B'], opts.note || ''));
+  }
+  // 選択式の項目を、群ごとの人数で示す（名義カテゴリ）
+  function catCard(rows, itemId, title, note) {
+    const it = itemOf(itemId);
+    const opts = it ? PS.optionsOf(it) : [];
+    const table = `<table class="tbl stat"><thead><tr><th>群</th>${opts.map((o) => `<th>${esc(o.label)}</th>`).join('')}<th>空欄</th></tr></thead><tbody>${GROUPS.map((g) => {
+      const rs = rows.filter((r) => r.group === g.id);
+      const blank = rs.filter((r) => r[itemId] === '' || r[itemId] === null || r[itemId] === undefined).length;
+      return `<tr><td>${g.label}</td>${opts.map((o) => `<td class="num">${rs.filter((r) => String(r[itemId]) === o.value).length}</td>`).join('')}<td class="num">${blank}</td></tr>`;
+    }).join('')}</tbody></table>`;
+    return mkCard(itemId.toLowerCase(), title || `${itemId} ${itemText(itemId)}`, '', table + (note ? `<p class="hint">${note}</p>` : ''), '', 'info');
   }
 
   function secCard(id, rows, key, ids, title, word, lowerIsBetter, note) {
@@ -320,17 +344,21 @@
   function buildSections(all) {
     const pairs3 = [['A', 'B'], ['A', 'C'], ['B', 'C']];
     // 診断をやり直した人は、アンケートの回答がやり直し後になるため、アンケート・自由継続の分析から除く。
-    // 開始前の時間・診断の時間・推定の精度（最初の診断と本人のHexad-12）は、やり直す前のデータなので含める。
+    // 開始前の時間・診断の時間・推定の精度（最初の診断と本人の動機づけ傾向12問）は、やり直す前のデータなので含める。
     const rows = all.filter((r) => Number(r.rediagnosed) !== 1);
     const sections = [];
 
     sections.push({ id: 'h1', title: '仮説1 開始前の負担', cards: [
-      likertCard('onb', rows, 'ONB', 'ONB 開始前の負担（4項目平均、低いほど負担が軽い）', '開始前の負担', pairs3, true, ['A', 'B'],
-        '主な比較は「AI対話 × アンケート」です。診断なし群は手続きがほぼないので参考値です。'),
-      secCard('prestart', all, 'prestart_sec', ['A', 'B', 'C'], '開始前の時間（番号入力 → 初めてのプレイ開始まで）', '開始前の時間', true,
-        'アンケートの主観に頼らない、客観的な負担の指標です。'),
+      likertCard('onb', rows, 'ONB', 'ONB1〜3 主観的開始負担（3項目平均、低いほど負担が軽い）', '主観的開始負担', [['A', 'B']], true, ['A', 'B'],
+        'ONB1〜3 が全て有効な人だけ平均しています（判断できない・該当しないが1つでもあれば除外）。診断なし群は項目別に扱うため、ここでは比べていません（下の項目別カード）。', ['A', 'B']),
+      ...itemCards(rows, ['ONB1', 'ONB2', 'ONB3'], { word: () => '負担', pairs: pairs3, lowerIsBetter: true,
+        note: '項目別（全群）。ONB3 の「該当しない」は得点に置き換えず、除いています。' }),
+      likertCard('onb4', rows, 'ONB4', `ONB4 ${itemText('ONB4')}（開始前の中断意向・単項目）`, '中断意向', pairs3, true, ['A', 'B'],
+        '実際の離脱率とは区別して扱います。'),
+      secCard('prep', all, 'prep_sec', ['A', 'B', 'C'], '開始準備の時間（はじめの4問の回答後 → スタートを押すまで）', '開始準備の時間', true,
+        'アンケートの主観に頼らない、客観的な負担の指標です。はじめの4問と準備直後の質問の回答時間は含みません。'),
       secCard('diag', all, 'diagnosis_sec', ['A', 'B'], '診断にかかった時間（診断開始 → 練習の準備へ）', '診断にかかった時間', true),
-      likertCard('s1', rows, 'S1', 'S1 開始前の過程そのものを楽しめた（1〜5）', '開始前の楽しさ', pairs3, false, ['A', 'B'], '補足の1項目です。'),
+      likertCard('s1', rows, 'S1', 'S1 開始前の過程そのものを楽しめた（1〜5）', '開始前の楽しさ', pairs3, false, ['A', 'B'], '補足の1項目です。開始時負担の平均には含めません。'),
     ] });
 
     // 精度
@@ -350,12 +378,12 @@
       const t1 = binomGreater(items[0].k, items[0].n, 1 / 6);
       const t2 = binomGreater(items[1].k, items[1].n, 2 / 6);
       const lead = items[0].n
-        ? `AI対話群では、割り当てたタイプが本人のHexad-12の1位と一致したのは ${items[0].k}/${items[0].n} 人（${Math.round(items[0].rate * 100)}%）、上位2位以内は ${items[1].k}/${items[1].n} 人（${Math.round(items[1].rate * 100)}%）でした。偶然に当たる確率（1位17%・上位2位33%）と比べると、1位は ${pEq(t1)}、上位2位は ${pEq(t2)}（片側の二項検定）です。`
+        ? `AI対話群では、割り当てたタイプが本人の動機づけ傾向12問の1位と一致したのは ${items[0].k}/${items[0].n} 人（${Math.round(items[0].rate * 100)}%）、上位2位以内は ${items[1].k}/${items[1].n} 人（${Math.round(items[1].rate * 100)}%）でした。偶然に当たる確率（1位17%・上位2位33%）と比べると、1位は ${pEq(t1)}、上位2位は ${pEq(t2)}（片側の二項検定）です。`
         : 'AI対話群の回答が集まると表示されます。';
-      accCards.push(mkCard('match', '割り当てたタイプが、本人のHexad-12と合っていた割合', lead,
+      accCards.push(mkCard('match', '割り当てたタイプが、本人の動機づけ傾向12問と合っていた割合', lead,
         `<div class="viz-legend"><span><i class="sw g-A"></i>AI対話</span><span><i class="sw g-C"></i>診断なし（達成者で固定）</span><span><i class="sw-chance"></i>偶然に当たる確率</span></div>` +
         rateBars(items, { title: 'タイプの一致率' }) +
-        '<p class="hint">アンケート群は、診断に使った回答と比較の基準が同じHexad-12なので一致率は100%になり、ここでは比べていません。</p>',
+        '<p class="hint">アンケート群は、診断に使った回答と比較の基準が同じ12問なので一致率は100%になり、ここでは比べていません。</p>',
         `<table class="tbl stat"><thead><tr><th>指標</th><th>一致</th><th>割合</th><th>偶然の確率</th><th>二項検定 p（片側）</th></tr></thead><tbody>${items.map((it) => `<tr><td>${esc(it.label)}</td><td class="num">${it.k}/${it.n}</td><td class="num">${it.n ? Math.round(it.rate * 100) + '%' : '—'}</td><td class="num">${Math.round(it.chance * 100)}%</td><td class="num">${fmtP(binomGreater(it.k, it.n, it.chance))}</td></tr>`).join('')}</tbody></table><p class="hint">同点のタイプが複数ある場合は、そのどれかに入っていれば1位一致としています。</p>`,
         items[0].n ? (t1 < 0.05 ? 'sig' : 'ns') : 'wait'));
     }
@@ -365,10 +393,10 @@
       const pos = rho.filter((v) => v > 0).length, nz = rho.filter((v) => v !== 0).length;
       const pSign = nz ? binomGreater(pos, nz, 0.5) : null;
       const lead = rho.length
-        ? `AIの6タイプの得点と本人のHexad-12の得点の順位相関（1人ずつ計算）は、中央値 ${fmt(median(rho))} でした。プラスの人は ${pos}/${nz} 人（符号検定 ${pEq(pSign)}、片側）。AIが推定した12項目の点数と本人の回答のずれ（平均絶対誤差、1〜7点）は中央値 ${fmt(median(mae))} 点です。`
+        ? `AIの6タイプの得点と本人の動機づけ傾向12問の得点の順位相関（1人ずつ計算）は、中央値 ${fmt(median(rho))} でした。プラスの人は ${pos}/${nz} 人（符号検定 ${pEq(pSign)}、片側）。AIが推定した12項目の点数と本人の回答のずれ（平均絶対誤差、1〜7点）は中央値 ${fmt(median(mae))} 点です。`
         : 'AI対話群の回答が集まると表示されます。';
       const s1 = [{ id: 'A', label: '順位相関 ρ', values: rho }], s2 = [{ id: 'A', label: '項目のずれ', values: mae }];
-      accCards.push(mkCard('rho', 'AIの推定と本人のHexad-12の近さ（AI対話群）', lead,
+      accCards.push(mkCard('rho', 'AIの推定と本人の動機づけ傾向12問の近さ（AI対話群）', lead,
         dotPlot(s1, { min: -1, max: 1, ticks: [-1, -0.5, 0, 0.5, 1], title: '順位相関' }) +
         dotPlot(s2, { min: 0, max: 6, ticks: [0, 1, 2, 3, 4, 5, 6], unit: '点', title: '平均絶対誤差' }) +
         '<p class="hint">順位相関は＋1に近いほど、6タイプの得点の並びが本人と一致しています（0は無関係）。項目のずれは小さいほど正確です。</p>',
@@ -378,37 +406,32 @@
     sections.push({ id: 'h2a', title: '仮説2 推定の精度', cards: accCards });
 
     sections.push({ id: 'h2b', title: '仮説2 体験と継続', cards: [
-      likertCard('fit', rows, 'FIT', 'FIT 自分に合っていると感じたか（4項目平均）', '「自分に合っている」感', pairs3, false, ['A', 'B']),
-      likertCard('enj', rows, 'ENJ', 'ENJ 楽しさ・満足（4項目平均）', '楽しさ・満足', pairs3, false, ['A', 'B']),
-      likertCard('ret', rows, 'RET', 'RET また使いたい気持ち（RET1〜3の平均）', '継続意向', pairs3, false, ['A', 'B'],
-        'RET4（ほかのツールとの比較）はタイピングゲーム経験者だけが答えるため、平均に含めていません。'),
-      secCard('free', rows, 'post_survey_play_sec', ['A', 'B', 'C'], '自由継続の時間（アンケート送信後に、自分から続けて遊んだ時間）', '自分から続けて遊んだ時間', false,
-        'アンケートに頼らない、行動から見た「続けたい気持ち」の指標です。送信後すぐ閉じた人は0秒です。送信後に「AIでタイプ診断してみる」を始めた場合は、その前までを数えています（どの群も同じ条件）。'),
+      ...itemCards(rows, ['FIT1', 'FIT2', 'FIT3', 'FIT4'], { word: () => '評価', pairs: pairs3,
+        note: '項目別に示します（FIT4問の総合平均は主指標にしない）。' }),
+      ...itemCards(rows, ['ENJ1', 'ENJ2', 'ENJ3', 'ENJ4'], { word: () => '評価', pairs: pairs3,
+        note: '項目別に示します（ENJ4問の総合平均は主指標にしない）。' }),
+      likertCard('ret', rows, 'RET', 'RET1〜3 継続利用意向（3項目平均）', '継続利用意向', pairs3, false, ['A', 'B'],
+        '副次的な暫定指標です。RET1〜3 が全て有効な人だけ平均しています。'),
+      likertCard('ret4', rows, 'RET4', `RET4 ${itemText('RET4')}（他ツールとの比較選好）`, '比較選好', pairs3, false, ['A', 'B'],
+        '比較できる人の項目別集計です。「比較できない」は得点外で、RET1〜3 の平均にも含めません。'),
+      secCard('free', rows, 'post_survey_play_sec', ['A', 'B', 'C'], '追加プレイの時間（アンケート送信後の任意の追加プレイ・最大10分）', '追加で遊んだ時間', false,
+        'アンケートに頼らない、行動から見た「続けたい気持ち」の指標です。追加で遊ばなかった人は0秒です。「AIでタイプ診断してみる」を始めた後は数えていません（どの群も同じ条件）。'),
+      catCard(rows, 'S3', 'S3 使いたい頻度（人数）', '名義カテゴリとして人数で示します（時間間隔が等しい数値にはしない）。'),
     ] });
 
-    const opts = [['every_play', '毎プレイ'], ['few_plays', '数回ごと'], ['weekly', '1週間ごと'], ['monthly', '1か月ごと'], ['none', '不要']];
-    const s4 = `<table class="tbl stat"><thead><tr><th>群</th>${opts.map((o) => `<th>${o[1]}</th>`).join('')}</tr></thead><tbody>${GROUPS.map((g) => {
-      const rs = rows.filter((r) => r.group === g.id);
-      return `<tr><td>${g.label}</td>${opts.map((o) => `<td class="num">${rs.filter((r) => r.S4 === o[0]).length}</td>`).join('')}</tr>`;
-    }).join('')}</tbody></table>`;
     sections.push({ id: 'h3', title: '仮説3 見直し', cards: [
-      likertCard('red', rows, 'RED', 'RED 好みの見直しへの受け入れ（4項目平均）', '見直しへの受け入れ', pairs3, false, ['A', 'B'],
-        '探索的な分析です。アンケートでは「見直しがあると仮定して」答えてもらっています。'),
-      mkCard('s4', 'S4 望ましい見直しの頻度（人数）', '', s4, '', 'info'),
+      ...itemCards(rows, ['RED1', 'RED2', 'RED3', 'RED4'], { word: (id) => (id === 'RED4' ? '自動変更への受容' : '見直しへの受容'), pairs: pairs3,
+        note: '探索課題です。共通の仮定場面を示して全群同じ設問で回答しています。RED1〜4 は合算しません。' }),
+      catCard(rows, 'S4', 'S4 好みの見直し（再診断）の頻度・タイミング（人数）', '最も望ましいものを1つ選ぶ設問です。名義カテゴリとして人数で示します。'),
     ] });
 
-    const exp = GROUPS.map((g) => {
-      const rs = rows.filter((r) => r.group === g.id);
-      const yes = rs.filter((r) => r.EXP === 'yes').length, no = rs.filter((r) => r.EXP === 'no').length;
-      const cmp = vals(rs, 'CMP1');
-      return `<tr><td>${g.label}</td><td class="num">${yes}</td><td class="num">${no}</td><td class="num">${cmp.length ? fmt(median(cmp)) : '—'}</td></tr>`;
-    }).join('');
     sections.push({ id: 'extra', title: '補足', cards: [
       likertCard('s2', rows, 'S2', 'S2 ゲームの操作は分かりやすかった（1〜5）', '操作の分かりやすさ', pairs3, false, ['A', 'B'],
         'ゲーム本体は全群共通なので、差がないことが望ましい項目です。'),
-      mkCard('exp', 'タイピングゲームの経験と、ほかのツールとの比較', '',
-        `<table class="tbl stat"><thead><tr><th>群</th><th>経験あり</th><th>経験なし</th><th>比較（中央値、1かなり劣る〜5かなり優れている）</th></tr></thead><tbody>${exp}</tbody></table><p class="hint">経験の有無が群でかたよっていないかの確認にも使えます。</p>`,
-        '', 'info'),
+      catCard(rows, 'BG1', 'BG1 キーボードで文字を入力する日（1週間あたり）', '入力操作への慣れ。各項目を群別に記述し、4問は合算しません。'),
+      catCard(rows, 'BG2', 'BG2 キーボード入力の得意さ（自己評価）', '技能の自己評価で、実測の入力速度とは区別します。'),
+      catCard(rows, 'BG3', 'BG3 このタイピングゲームで遊んだことがあるか', '既体験者の識別用です（主対象は未体験者）。'),
+      catCard(rows, 'BG4', 'BG4 追加で最大10分遊ぶ時間の余裕', '追加プレイの有無を、予定上の時間制約と区別するための設問です。'),
     ] });
     return sections;
   }
@@ -439,7 +462,7 @@
       <li><strong>3群の比較</strong>：Kruskal-Wallis検定（同順位補正つき）。効果量 ε²。</li>
       <li><strong>複数の2群比較</strong>：Holm法で p値を補正。</li>
       <li><strong>タイプの一致率</strong>：偶然に当たる確率（1位 1/6、上位2位 2/6）との片側の二項検定。</li>
-      <li><strong>順位相関</strong>：1人ずつ、AIの6タイプ得点と本人のHexad-12得点のSpearman相関。プラスの人の割合を符号検定。</li>
+      <li><strong>順位相関</strong>：1人ずつ、AIの6タイプ得点と本人の動機づけ傾向12問得点のSpearman相関。プラスの人の割合を符号検定。</li>
       <li><strong>グラフ</strong>：1人＝1点、縦線は中央値。点にマウスを乗せると値が出ます。</li>
       <li>論文に載せる最終的な数値は、CSVで確認したうえで使ってください。</li></ul></div>`;
 
