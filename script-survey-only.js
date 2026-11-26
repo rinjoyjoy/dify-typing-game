@@ -929,10 +929,11 @@ function initWelcomeScreen() {
 }
 
 /* ============================================================
-   1. アンケート画面（Hexad-12・12問・7段階評価）
-   本実験では、アンケート群の診断に正規の尺度（Hexad-12の日本語訳）を使う。
-   設問文は事後アンケートと共通（post-survey-items.js）。ここでの回答は、事後アンケートの
-   Hexad-12の回答としてそのまま使うため、アンケート群は事後アンケートで同じ質問に答えない。
+   1. アンケート画面（動機づけ傾向・12問・7件法）
+   本実験では、アンケート群の診断に本研究用の動機づけ傾向12問（Hexadを参考。修正版アンケートの HEX01〜12）を使う。
+   設問文・選択肢は事後アンケートと共通（post-survey-items.js）。ここでの回答は、事後アンケートの
+   HEX01〜12 の回答としてそのまま使うため、アンケート群は事後アンケートで同じ質問に答えない。
+   「判断できない」（DK）も選べる。DK はタイプの判定では、その項目を除いて計算する。
    ============================================================ */
 
 const ONBOARD_ITEMS = PostSurveyItems.ALL_ITEMS
@@ -942,49 +943,37 @@ const ONBOARD_ITEMS = PostSurveyItems.ALL_ITEMS
 function renderSurveyForm() {
   const formEl = $('#survey-form');
   appState.answers = {};
-  const ends = PostSurveyItems.LIKERT7_ENDS;
+  const labels = PostSurveyItems.LIKERT7;
+  const dk = PostSurveyItems.DK;
 
   formEl.innerHTML = ONBOARD_ITEMS.map((item, idx) => `
-    <div class="survey-item" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid #e0e0e0;">
-      <p style="margin: 0 0 0.75rem; font-weight: 500; line-height: 1.5;">
-        <span style="color: var(--theme-color, #2a78d6); font-weight: 700; margin-right: 0.5rem;">Q${idx + 1}.</span>${escapeHtml(item.text)}
-      </p>
-      <div class="likert-group" data-qid="${item.id}" style="display: flex; gap: 6px;">
-        ${[1, 2, 3, 4, 5, 6, 7].map((n) => `
-          <button type="button"
-            class="likert-btn"
-            data-value="${n}"
-            style="flex: 1; min-width: 0; padding: 10px 0; border: 2px solid var(--baseline); border-radius: 6px; background: var(--surface-1); cursor: pointer; font-size: 0.9rem; transition: all 0.15s;"
-          >${n}</button>
+    <div class="survey-item onb-item">
+      <p class="onb-q"><span class="onb-num">Q${idx + 1}.</span>${escapeHtml(item.text)}</p>
+      <div class="likert-group onb-likert" data-qid="${item.id}">
+        ${labels.map((lbl, i) => `
+          <button type="button" class="likert-btn" data-value="${i + 1}"><b>${i + 1}</b><span>${escapeHtml(lbl)}</span></button>
         `).join('')}
       </div>
-      <div class="likert7-ends"><span>1＝${escapeHtml(ends[0])}</span><span>7＝${escapeHtml(ends[1])}</span></div>
+      <div class="likert-group onb-dk" data-qid="${item.id}">
+        <button type="button" class="likert-btn likert-dk" data-value="${dk.value}">${escapeHtml(dk.label)}</button>
+      </div>
     </div>
   `).join('');
 
-  // リッカートボタンのイベント
-  formEl.querySelectorAll('.likert-group').forEach((group) => {
-    const qid = group.dataset.qid;
-    group.querySelectorAll('.likert-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        group.querySelectorAll('.likert-btn').forEach((b) => {
-          b.style.background = 'var(--surface-1)';
-          b.style.borderColor = 'var(--baseline)';
-          b.style.color = 'var(--text-primary)';
-        });
-        btn.style.background = 'var(--theme-color, #2a78d6)';
-        btn.style.borderColor = 'var(--theme-color, #2a78d6)';
-        btn.style.color = 'white';
-        appState.answers[qid] = Number(btn.dataset.value);
-        // 全問回答済みか確認
-        checkSurveyComplete();
-      });
+  formEl.querySelectorAll('.likert-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const qid = btn.closest('.likert-group').dataset.qid;
+      formEl.querySelectorAll(`.likert-group[data-qid="${qid}"] .likert-btn`).forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      appState.answers[qid] = btn.dataset.value === dk.value ? dk.value : Number(btn.dataset.value);
+      checkSurveyComplete();
     });
   });
+  checkSurveyComplete();
 }
 
 function checkSurveyComplete() {
-  const answered = Object.keys(appState.answers).length;
+  const answered = ONBOARD_ITEMS.filter((it) => appState.answers[it.id] !== undefined).length;
   const submitBtn = $('#btn-survey-submit');
   if (answered >= ONBOARD_ITEMS.length) {
     submitBtn.disabled = false;
@@ -1007,14 +996,16 @@ $('#btn-survey-submit').addEventListener('click', () => {
 });
 
 /* スコアベース判定（ルールベース）
-   Hexad-12：タイプごとに2項目の平均（1〜7）を求め、0〜100に換算する。
+   方向ごとに2項目の平均（1〜7）を求め、0〜100に換算する。「判断できない」の項目は除いて平均する
+   （2問とも判断できない方向は、中央の4として扱う）。
    最高得点が同点のときは、特定のタイプに偏らないよう、同点のタイプからランダムに1つ選ぶ。 */
 function classifyByScore(answers) {
   const sums = {};
   const counts = {};
   for (const type of HEXAD_ORDER) { sums[type] = 0; counts[type] = 0; }
   for (const item of ONBOARD_ITEMS) {
-    const val = Number(answers[item.id]) || 4;
+    const val = Number(answers[item.id]);
+    if (!(val >= 1 && val <= 7)) continue;
     sums[item.type] += val;
     counts[item.type]++;
   }
@@ -1035,6 +1026,7 @@ function classifyByScore(answers) {
     scores: normalized,
     means,
     tiedTypes: tied.length > 1 ? tied : null,
+    nDontKnow: ONBOARD_ITEMS.filter((it) => answers[it.id] === 'DK').length,
     rationale: `アンケート結果から「${HEXAD_TYPES[primaryType].label}」タイプが最も強く現れました。`,
     method: 'survey',
   };
@@ -1915,7 +1907,7 @@ function renderPostgame(result, stats, clearStatus) {
     pidNote.style.display = appState.participantId ? 'block' : 'none';
   }
 
-  // 必須プレイ（約5分）を終えたら、アンケートへの案内を出す（study-flow.js）
+  // 全群共通のプレイ（10分）を終えたら、アンケートへの案内を出す（study-flow.js）
   StudyFlow.updatePostgame();
 
   $('#log-count').textContent = getLog().length;

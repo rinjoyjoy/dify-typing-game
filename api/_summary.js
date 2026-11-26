@@ -4,8 +4,10 @@ const { query } = require('./db');
 const PostSurvey = require('../post-survey-items.js');
 
 const HEXAD_ORDER = ['achiever', 'player', 'socialiser', 'freeSpirit', 'philanthropist', 'disruptor'];
-const EVENT_COLS = ['entry', 'onboardingStart', 'onboardingEnd', 'firstGameStart', 'freeChoiceShown', 'surveyStart', 'surveySubmit'];
-const COUNT_COLS = ['n_games_started', 'n_free_continue', 'n_clear', 'n_fail', 'n_rediagnose_clicked', 'n_rediagnose_done', 'n_resumes'];
+const EVENT_COLS = ['entry', 't0Start', 't0Submit', 'onboardingStart', 'onboardingEnd', 't1Start', 't1Submit', 'firstGameStart', 'freeChoiceShown', 'surveyStart', 'surveySubmit', 'extraPlayChosen', 'extraPlayStart', 'finished'];
+const COUNT_COLS = ['n_games_started', 'n_post_survey_games', 'n_clear', 'n_fail', 'n_rediagnose_clicked', 'n_rediagnose_done', 'n_resumes'];
+// 途中経過の送信（T0・T1）と最後の送信（final）。参加IDごとに、いちばん進んだ送信を1行として使う
+const STAGE_RANK = { T0: 1, T1: 2, final: 3 };
 
 function safeEqual(a, b) {
   const ba = Buffer.from(String(a));
@@ -25,6 +27,10 @@ function toCsv(header, rows) {
 function mean(nums) {
   const v = nums.filter((n) => typeof n === 'number' && Number.isFinite(n));
   return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 1000) / 1000 : null;
+}
+// 全項目が有効（数値）な場合だけ平均する。判断できない（DK）・該当しない（NA）・比較できない（NC）・空欄が1つでもあれば null
+function meanAll(nums) {
+  return nums.length && nums.every((n) => typeof n === 'number' && Number.isFinite(n)) ? mean(nums) : null;
 }
 function secBetween(a, b) {
   if (!a || !b) return null;
@@ -59,11 +65,21 @@ function spearman(x, y) {
 
 async function summaryRows() {
   // 1回答＝1行（同じ参加者番号の回答が複数あっても、上書き・統合せずにすべて出す。pid_duplicates で確認できる）
-  const surveys = (await query(`
+  const allSurveys = (await query(`
     SELECT id, participant_id, entry_id, participant_group, condition, answers, payload, created_at
     FROM survey_responses
     ORDER BY created_at
   `)).rows;
+  // 途中経過（T0・T1）と最後の送信を、参加IDごとに1行にまとめる（いちばん進んだ送信。同じ段階なら新しいほう）
+  const stageOf = (s) => (s.payload && s.payload.stage) || 'final'; // stage がない古い記録は最後の送信
+  const best = new Map();
+  allSurveys.forEach((s) => {
+    const k = s.entry_id || (s.payload && s.payload.entryId) || `id:${s.id}`;
+    const cur = best.get(k);
+    const rank = STAGE_RANK[stageOf(s)] || 3;
+    if (!cur || rank > cur.rank || (rank === cur.rank && new Date(s.created_at) >= new Date(cur.s.created_at))) best.set(k, { s, rank });
+  });
+  const surveys = [...best.values()].map((b) => b.s).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   // プレイ記録は参加IDごとに集計する（参加IDがない古い記録は参加者番号で集計）
   // 診断をやり直した人は、やり直し後のプレイを含めないので、1回ずつ取り出してから集計する
   const sessions = (await query(`
@@ -110,17 +126,25 @@ async function summaryRows() {
       pid_duplicates: pidCount.get(String(s.participant_id)) || 1, // 2以上なら、同じ番号で複数回答がある
       group: s.participant_group,
       condition: s.condition,
+      stage: stageOf(s), // final＝アンケートまで回答、T1＝準備直後の質問まで、T0＝はじめの4問まで（途中でやめた・回答中）
+      complete: stageOf(s) === 'final' ? 1 : 0,
       submitted_at: s.created_at && new Date(s.created_at).toISOString(),
+      items_version: (s.payload && s.payload.itemsVersion) || '',
     };
     itemIds.forEach((id) => { row[id] = a[id] ?? ''; });
 
-    // 尺度得点（平均）
-    for (const [scale, ids] of Object.entries(PostSurvey.SCALES)) row[`${scale}_mean`] = mean(ids.map((id) => a[id]));
+    // 得点（修正版の集計方法）：ONB1〜3（AI対話・アンケート群のみ）と RET1〜3 は全項目が有効な場合だけ平均。
+    // FIT・ENJ・RED は総合平均を作らず項目別。RET4・ONB4 は単項目。
+    for (const sc of PostSurvey.SCORES) {
+      row[sc.id] = sc.groups && !sc.groups.includes(s.participant_group) ? '' : meanAll(sc.items.map((id) => a[id]));
+    }
+    // 動機づけ傾向：方向ごとの2問がともに有効なら平均（6方向を保持。12問の合計は作らない）
     const hexMeans = {};
     HEXAD_ORDER.forEach((t) => {
-      hexMeans[t] = mean(hexItems.filter((i) => i.hexadType === t).map((i) => a[i.id]));
+      hexMeans[t] = meanAll(hexItems.filter((i) => i.hexadType === t).map((i) => a[i.id]));
       row[`HEX_${t}`] = hexMeans[t];
     });
+    row.n_dont_know = Object.values(a).filter((v) => v === 'DK').length;
 
     // 割り当てられたタイプ（診断なし群は達成者で固定）と、本人のHexad-12との一致
     // 診断をやり直した人は、最初の診断を分析に使う（やり直し後の結果は final_type に残す）
@@ -135,7 +159,7 @@ async function summaryRows() {
     const rediagAt = hist[0] && hist[0].archivedAt ? hist[0].archivedAt : null;
     row.rediagnosed_at = rediagAt || '';
     // アンケート送信後のプレイ（自由に遊んだ分・送信後の再診断）も含めない
-    const submittedAt = s.created_at ? new Date(s.created_at).toISOString() : null;
+    const submittedAt = row.complete && s.created_at ? new Date(s.created_at).toISOString() : null;
     const cutoff = rediagAt && (!submittedAt || rediagAt < submittedAt) ? rediagAt : submittedAt;
     const assigned = hr && hr.primaryType ? hr.primaryType : (s.participant_group === 'C' ? 'achiever' : null);
     row.assigned_type = assigned;
@@ -162,15 +186,17 @@ async function summaryRows() {
     const aiItems = hr && hr.itemRatings ? hr.itemRatings : null;
     hexItems.forEach((it) => { row[`ai_${it.id}`] = aiItems ? aiItems[it.id] ?? '' : ''; });
     row.ai_runs = hr && hr.runs ? hr.runs : '';
-    if (aiItems && hexItems.every((it) => typeof a[it.id] === 'number' && Number.isFinite(Number(aiItems[it.id])))) {
-      row.ai_item_mae = mean(hexItems.map((it) => Math.abs(Number(aiItems[it.id]) - a[it.id])));
-    } else {
-      row.ai_item_mae = '';
-    }
+    // 本人が数値で答えた項目だけで計算する（判断できない・空欄の項目は除く。使った項目数を ai_item_mae_n に出す）
+    const maeItems = aiItems ? hexItems.filter((it) => typeof a[it.id] === 'number' && Number.isFinite(Number(aiItems[it.id]))) : [];
+    row.ai_item_mae = maeItems.length ? mean(maeItems.map((it) => Math.abs(Number(aiItems[it.id]) - a[it.id]))) : '';
+    row.ai_item_mae_n = maeItems.length || '';
 
     // 時刻と所要時間
     EVENT_COLS.forEach((k) => { row[`t_${k}`] = ev[k] || ''; });
-    row.prestart_sec = secBetween(ev.entry, ev.firstGameStart);        // 番号入力 → 初回スタート（全群共通の開始前時間）
+    row.prestart_sec = secBetween(ev.entry, ev.firstGameStart);        // 番号入力 → 初回スタート（T0・T1の回答時間も含む）
+    row.prep_sec = secBetween(ev.t0Submit, ev.t1Start);                // 群ごとの開始準備：はじめの4問の回答後 → スタートを押して準備直後の質問が出るまで
+    row.t0_sec = secBetween(ev.t0Start, ev.t0Submit);                  // はじめの4問の回答時間
+    row.t1_sec = secBetween(ev.t1Start, ev.t1Submit);                  // 準備直後の質問の回答時間
     row.diagnosis_sec = secBetween(ev.onboardingStart, ev.onboardingEnd); // 診断の開始 → 練習の準備へ（A・B群）
     // やり直した人は、やり直した時点で打ち切る（それ以降は分析に含めない）
     const playEnd = cutoff && ev.surveyStart && cutoff < ev.surveyStart ? cutoff : ev.surveyStart;

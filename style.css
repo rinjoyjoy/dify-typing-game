@@ -686,3 +686,28 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 .ps-after h3 { margin-top: 0; }
 .ps-after .btn { margin-top: 6px; }
 .gate-ai { margin-top: 10px; }
+
+/* 修正版アンケート（2026-11-26）：全選択肢に言葉のラベル、得点外の選択肢（判断できない等）は別の行 */
+.likert label { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; line-height: 1.3; }
+.likert .lk-n { font-size: 0.85rem; color: var(--text-primary); }
+.likert7 label { padding: 8px 1px; font-size: 0.7rem; }
+.likert-extra { margin-top: 8px; }
+.likert-extra label { font-size: 0.8rem; padding: 6px 10px; color: var(--text-secondary); }
+.ps-common { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: var(--page); font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary); }
+.ps-note { margin: -4px 0 8px !important; font-size: 0.8rem; }
+.ps-extra-guide { text-align: left; }
+.ps-extra-choice { justify-content: center; gap: 10px; flex-wrap: wrap; }
+/* アンケート群の診断（動機づけ傾向12問） */
+.onb-item { margin-bottom: 1rem; padding: 1rem; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px solid #e0e0e0; }
+.onb-q { margin: 0 0 0.75rem; font-weight: 500; line-height: 1.5; }
+.onb-num { color: var(--theme-color, #2a78d6); font-weight: 700; margin-right: 0.5rem; }
+.onb-likert { display: flex; gap: 4px; }
+.likert-btn { flex: 1; min-width: 0; padding: 8px 1px; border: 2px solid var(--baseline); border-radius: 6px; background: var(--surface-1); color: var(--text-primary); cursor: pointer; font: inherit; font-size: 0.68rem; line-height: 1.3; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: all 0.15s; }
+.likert-btn b { font-size: 0.9rem; }
+.likert-btn.selected { background: var(--theme-color, #2a78d6); border-color: var(--theme-color, #2a78d6); color: #fff; }
+.onb-dk { margin-top: 6px; display: flex; }
+.likert-dk { flex: 0 0 auto; padding: 6px 14px; font-size: 0.8rem; }
+@media (max-width: 560px) {
+  .likert7, .onb-likert { flex-wrap: wrap; }
+  .likert7 label, .onb-likert .likert-btn { flex: 1 1 22%; }
+}

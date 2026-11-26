@@ -232,7 +232,7 @@
     <div class="dlg-body" id="dlg-body"></div>
   </dialog>
 
-  <script src="post-survey-items.js"></script>
+  <script src="post-survey-items.js?v=20261126b"></script>
   <script src="admin-stats.js"></script>
   <script>
     (function () {
@@ -341,15 +341,15 @@
         const rows = ['A', 'B', 'C'].map((g) => {
           const rs = real.filter((r) => r.group === g);
           return `<tr><td>${COND[g]}</td><td class="num">${rs.length}</td>
-            <td class="num">${fmtNum(mean(rs, 'ONB'), 2)}</td><td class="num">${fmtNum(mean(rs, 'FIT'), 2)}</td><td class="num">${fmtNum(mean(rs, 'ENJ'), 2)}</td>
-            <td class="num">${fmtNum(mean(rs, 'RET'), 2)}</td><td class="num">${fmtNum(mean(rs, 'RED'), 2)}</td>
-            <td class="num">${fmtSec(mean(rs, 'prestart_sec'))}</td><td class="num">${g === 'C' ? '—' : fmtSec(mean(rs, 'diagnosis_sec'))}</td>
-            <td class="num">${fmtSec(mean(rs, 'free_play_sec'))}</td>
+            <td class="num">${g === 'C' ? '—' : fmtNum(mean(rs, 'ONB'), 2)}</td><td class="num">${fmtNum(mean(rs, 'ONB4'), 2)}</td><td class="num">${fmtNum(mean(rs, 'ENJ4'), 2)}</td>
+            <td class="num">${fmtNum(mean(rs, 'RET'), 2)}</td>
+            <td class="num">${fmtSec(mean(rs, 'prep_sec'))}</td><td class="num">${g === 'C' ? '—' : fmtSec(mean(rs, 'diagnosis_sec'))}</td>
+            <td class="num">${fmtSec(mean(rs, 'post_survey_play_sec'))}</td>
             <td class="num">${g === 'B' ? '（基準）' : pct(rs, 'assigned_is_top')}</td><td class="num">${g === 'B' ? '（基準）' : pct(rs, 'assigned_in_top2')}</td>
             <td class="num">${g === 'A' ? fmtNum(mean(rs, 'ai_item_mae'), 2) : '—'}</td></tr>`;
         });
-        $('#group-table').innerHTML = `<thead><tr><th>条件</th><th>人数</th><th title="開始前の負担（低いほど楽）">ONB↓</th><th>FIT</th><th>ENJ</th><th>RET</th><th>RED</th>
-          <th>開始前の時間</th><th>診断の時間</th><th>自由継続</th><th>タイプ1位一致</th><th>上位2位以内</th><th>AIのずれ</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+        $('#group-table').innerHTML = `<thead><tr><th>条件</th><th>人数</th><th title="主観的開始負担 ONB1〜3 の平均（低いほど楽）。診断なし群は項目別に扱うため出さない">ONB1-3↓</th><th title="開始前の中断意向（単項目）">ONB4↓</th><th title="全体満足度（単項目）">ENJ4</th><th title="継続利用意向 RET1〜3 の平均">RET1-3</th>
+          <th title="はじめの4問の回答後から、スタートを押すまで">開始準備の時間</th><th>診断の時間</th><th title="アンケート送信後の任意の追加プレイ">追加プレイ</th><th>タイプ1位一致</th><th>上位2位以内</th><th>AIのずれ</th></tr></thead><tbody>${rows.join('')}</tbody>`;
       }
 
       function renderPeople() {
@@ -363,19 +363,20 @@
         list.sort((a, b) => (Number(b.participant_id) || 0) - (Number(a.participant_id) || 0));
         if (!list.length) { $('#people-table').innerHTML = '<tbody><tr><td>該当する記録はありません。</td></tr></tbody>'; return; }
         const rows = list.map((r, i) => {
-          const status = r.kind === 'responded' ? '<span class="badge ok">回答済み</span>' : '<span class="badge wip">途中</span>';
+          const stageLabel = { T0: 'はじめの4問まで', T1: '準備直後の質問まで' }[r.stage];
+          const status = r.kind === 'responded' ? '<span class="badge ok">回答済み</span>' : `<span class="badge wip">途中${stageLabel ? `（${stageLabel}）` : ''}</span>`;
           const dup = Number(r.pid_duplicates) > 1 ? ' <span class="badge dup">番号重複</span>' : '';
           const test = isTest(r) ? ' <span class="badge">テスト</span>' : '';
           const match = r.kind !== 'responded' || !r.assigned_type ? '—' : r.assigned_is_top === 1 ? '◯' : r.assigned_in_top2 === 1 ? '△' : '×';
           return `<tr>
             <td class="num">${esc(r.participant_id)}</td><td>${esc(r.condition)}</td><td>${status}${dup}${test}</td>
             <td class="num">${fmtNum(r.n_sessions, 0)}</td><td class="num">${fmtSec(r.total_play_sec)}</td>
-            <td class="num">${r.kind === 'responded' ? fmtSec(r.prestart_sec) : '—'}</td>
+            <td class="num">${r.kind === 'responded' ? fmtSec(r.prep_sec) : '—'}</td>
             <td>${r.assigned_type ? TYPE_JA[r.assigned_type] || r.assigned_type : '—'}${Number(r.rediagnosed) === 1 ? `<br><span class="hint">やり直し後：${TYPE_JA[r.final_type] || r.final_type || '—'}</span>` : ''}</td><td>${typeList(r.hex_top_types)}</td><td style="text-align:center;">${match}</td>
             <td>${fmtTime(r.kind === 'responded' ? r.submitted_at : r.last_at)}</td>
             <td>${r.kind === 'responded' ? `<button class="btn-sm" data-detail="${r.response_id}">詳細</button> ` : ''}<button class="btn-sm danger" data-del="${i}">削除</button></td></tr>`;
         });
-        $('#people-table').innerHTML = `<thead><tr><th>番号</th><th>条件</th><th>状態</th><th>プレイ回数</th><th>プレイ時間</th><th>開始前の時間</th>
+        $('#people-table').innerHTML = `<thead><tr><th>番号</th><th>条件</th><th>状態</th><th>プレイ回数</th><th>プレイ時間</th><th>開始準備の時間</th>
           <th>割り当てタイプ</th><th>本人のHexad 1位</th><th>一致</th><th>最終更新</th><th></th></tr></thead><tbody>${rows.join('')}</tbody>`;
         $('#people-table').querySelectorAll('[data-detail]').forEach((b) => b.addEventListener('click', () => openDetail(b.dataset.detail)));
         $('#people-table').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => deleteOne(list[Number(b.dataset.del)])));
@@ -394,7 +395,7 @@
             if (!items.length) return '';
             return `<h3>${esc(sec.title)}</h3><div class="qa">${items.map((it) => {
               let v = a[it.id];
-              if (it.type === 'choice') { const o = it.options.find((x) => x.value === String(v)); v = o ? o.label : v; }
+              if (it.type !== 'text') v = P.labelOf(it, v);
               const isText = it.type === 'text';
               return isText ? `<div class="q">${esc(it.id)}：${esc(it.text)}</div><div class="a text">${esc(v)}</div>`
                 : `<div class="q">${esc(it.id)}：${esc(it.text)}</div><div class="a">${esc(v)}</div>`;
@@ -405,7 +406,7 @@
           const chat = Array.isArray(p.chatTranscript) && p.chatTranscript.length
             ? `<h3>AIとの会話</h3><div class="chat">${p.chatTranscript.map((l) => `<div class="${l.role === 'user' ? 'user' : 'ai'}">${esc(l.text)}</div>`).join('')}</div>` : '';
           const ev = p.events || {};
-          const evRows = [['番号入力', ev.entry], ['診断開始', ev.onboardingStart], ['診断終了', ev.onboardingEnd], ['初回プレイ', ev.firstGameStart], ['アンケートを選べるようになった', ev.freeChoiceShown], ['アンケート開始', ev.surveyStart], ['送信', ev.surveySubmit]]
+          const evRows = [['番号入力', ev.entry], ['はじめの4問 回答', ev.t0Submit], ['診断開始', ev.onboardingStart], ['診断終了', ev.onboardingEnd], ['準備直後の質問 開始', ev.t1Start], ['準備直後の質問 回答', ev.t1Submit], ['初回プレイ', ev.firstGameStart], ['10分のプレイ終了の案内', ev.freeChoiceShown], ['アンケート開始', ev.surveyStart], ['送信', ev.surveySubmit], ['追加プレイ開始', ev.extraPlayStart], ['終了', ev.finished]]
             .filter(([, t]) => t).map(([k, t]) => `<div class="q">${k}</div><div class="a">${new Date(t).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' })}</div>`).join('');
           body.innerHTML = `
             <h3>診断</h3><div class="qa">

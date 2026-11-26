@@ -1,15 +1,20 @@
 /* 本実験の進行管理（全群共通）
+   流れ（修正版アンケート v1 2026-11-16 に準拠）
+     番号入力 → T0 はじめの4問（BG1〜4）→ 群ごとの開始準備（AI対話・アンケート・診断なし）
+     → T1 準備直後の質問（ONB1〜4・S1。最初のプレイの前）→ 全群共通のプレイ10分
+     → T2 アンケート（追加プレイを選ぶ前）→ 任意の追加プレイ（最大10分・いつでも終了できる）
    - 開始前の手続き・プレイ開始などの時刻を記録する（クリックを横取りして記録するので、各群のスクリプトはほぼ変更不要）
-   - 必須プレイ（約5分）→ 自由継続（最大でプレイ開始から15分）→ アプリ内アンケート、の流れを制御する
-   - アンケート回答は、記録した時刻・診断結果などと一緒に /api/save-survey へ自動送信する
+   - アンケートの回答は、記録した時刻・診断結果などと一緒に /api/save-survey へ自動送信する
+     （T0・T1 の時点でも途中経過を送る。途中でやめた人の開始前の負担も残すため。分析では参加IDごとに最後の送信を使う）
    - 連続で失敗（クリアならず）が続いたら、クリア目標を下げる（難易度の下限）
    index.html で各群のスクリプトより先に読み込む。 */
 (function () {
   'use strict';
 
-  const REQUIRED_PLAY_MS = 5 * 60 * 1000;   // 必須プレイ：初回のスタートから5分
-  const MAX_PLAY_MS = REQUIRED_PLAY_MS;     // 5分たったら、アンケートを送信するまで新しいプレイは始められない（送信後は自由に遊べる）
-  const ITEMS_VERSION = '2026-11-18b';
+  const REQUIRED_PLAY_MS = 10 * 60 * 1000;  // 全群共通のプレイ：初回のスタートから10分
+  const MAX_PLAY_MS = REQUIRED_PLAY_MS;     // 10分たったら、アンケートを送信するまで新しいプレイは始められない
+  const EXTRA_PLAY_MS = 10 * 60 * 1000;     // アンケート送信後の任意の追加プレイ：最大10分（最初の追加プレイの開始から）
+  const ITEMS_VERSION = '2026-11-26b';
 
   const KEYS = {
     events: 'gtp_study_events',
@@ -22,8 +27,8 @@
     participant: 'gtp_participant_meta',
     log: 'gtp_log',
     hexadResult: 'gtp_hexad_result',
-    diagHistory: 'gtp_diag_history',
-    aiTrial: 'gtp_ai_trial', // アンケート送信後に「AIでタイプ診断してみる」を始めた（以降のプレイはDBに送らない） // 診断をやり直したとき、やり直す前の診断（結果・会話・回答）を残す
+    diagHistory: 'gtp_diag_history', // 診断をやり直したとき、やり直す前の診断（結果・会話・回答）を残す
+    aiTrial: 'gtp_ai_trial', // アンケート送信後に「AIでタイプ診断してみる」を始めた（以降のプレイはDBに送らない）
     entryId: 'gtp_entry_id',
   };
   const CONDITION_LABELS = { A: 'AI対話', B: 'アンケート', C: '診断なし' };
@@ -60,6 +65,10 @@
     ev[name] = (Number(ev[name]) || 0) + 1;
     save(KEYS.events, ev);
   }
+  function stageDone(stage) {
+    if (stage === 'T2') return isSubmitted();
+    return !!getEvents()[stage === 'T0' ? 't0Submit' : 't1Submit'];
+  }
 
   // AI対話群：会話ログを保存しておく（リロードで画面から消えても送信できるように）
   function snapshotChat() {
@@ -82,19 +91,25 @@
   document.addEventListener('click', (e) => {
     const btn = e.target && e.target.closest ? e.target.closest('button') : null;
     if (!btn || !btn.id) return;
-    // 5分たったら、アンケートを送信するまでプレイを始められない（押したらアンケートへ）
-    if ((btn.id === 'btn-start-game' || btn.id === 'btn-play-again') && playGated()) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      openSurvey();
-      return;
+    if (btn.id === 'btn-start-game' || btn.id === 'btn-play-again') {
+      const block = (fn) => { e.preventDefault(); e.stopImmediatePropagation(); fn(); };
+      if (!isSubmitted()) {
+        // 最初のプレイの前に、T0（未回答なら）とT1に答えてもらう
+        if (!stageDone('T0')) return block(() => openStage('T0'));
+        if (!stageDone('T1')) return block(() => openStage('T1'));
+        // 10分たったら、アンケートを送信するまでプレイを始められない（押したらアンケートへ）
+        if (playGated()) return block(() => openStage('T2'));
+      } else if (!isAiTrial() && extraState().phase === 'over') {
+        // 追加プレイ（最大10分）が終わった
+        return block(() => openEnd());
+      }
     }
     switch (btn.id) {
       case 'btn-start-survey-llm':   // AI対話群：診断開始
       case 'btn-start-survey':       // アンケート群：診断開始
         mark('onboardingStart');
         break;
-      case 'btn-survey-submit':      // アンケート群：Hexad-12の回答を確定（最初の診断の回答を保存。事後アンケートで再利用する）
+      case 'btn-survey-submit':      // アンケート群：動機づけ傾向12問の回答を確定（事後アンケートで再利用する）
         if (typeof appState !== 'undefined' && appState && appState.answers && !load(KEYS.onboardingAnswers, null)) {
           save(KEYS.onboardingAnswers, { ...appState.answers });
         }
@@ -105,7 +120,10 @@
         break;
       case 'btn-start-game':
       case 'btn-play-again':
-        if (isSubmitted()) bump('n_post_survey_games'); // アンケート送信後に自分から遊んだ回数
+        if (isSubmitted()) {
+          bump('n_post_survey_games'); // アンケート送信後に自分から遊んだ回数
+          if (!isAiTrial()) mark('extraPlayStart');
+        }
         mark('firstGameStart');
         bump('n_games_started');
         break;
@@ -124,10 +142,19 @@
     if (elapsed < MAX_PLAY_MS) return { phase: 'free', elapsed, remaining: MAX_PLAY_MS - elapsed };
     return { phase: 'over', elapsed, remaining: 0 };
   }
-  // 5分のプレイが終わり、まだアンケートを送信していない
+  // 10分のプレイが終わり、まだアンケートを送信していない
   function playGated() {
     const ph = playState().phase;
     return (ph === 'free' || ph === 'over') && !load(KEYS.submitted, null);
+  }
+  // アンケート送信後の追加プレイ（最大10分）
+  function extraState() {
+    const ev = getEvents();
+    const start = ev.extraPlayStart ? Date.parse(ev.extraPlayStart) : null;
+    if (!start) return { phase: 'notStarted', remaining: EXTRA_PLAY_MS };
+    const elapsed = Date.now() - start;
+    if (elapsed < EXTRA_PLAY_MS) return { phase: 'playing', remaining: EXTRA_PLAY_MS - elapsed };
+    return { phase: 'over', remaining: 0 };
   }
   function fmtClock(ms) {
     const s = Math.max(0, Math.ceil(ms / 1000));
@@ -172,16 +199,23 @@
     if (!show) { p.style.display = 'none'; return; }
     const st = playState();
     let text = '';
-    if (isSubmitted()) text = 'アンケート送信済み｜ここからは自由に遊べます';
-    else if (st.phase === 'notStarted') text = 'プレイ時間の目安：約5分';
+    let phaseKey = st.phase;
+    if (isSubmitted()) {
+      const ex = extraState();
+      phaseKey = `extra-${ex.phase}`;
+      if (isAiTrial()) text = 'AIでのタイプ診断を試しています｜研究データには含まれません';
+      else if (ex.phase === 'notStarted') text = 'アンケート送信済み｜追加プレイは任意・最大10分です';
+      else if (ex.phase === 'playing') text = `追加プレイ 残り ${fmtClock(ex.remaining)}｜いつでも終了できます`;
+      else text = '追加プレイの時間（最大10分）が終わりました';
+    } else if (st.phase === 'notStarted') text = 'プレイ時間：約10分';
     else if (st.phase === 'required') text = `アンケートまで あと ${fmtClock(st.remaining)}`;
-    else text = '5分のプレイ終了｜アンケートに答えてください';
+    else text = '10分のプレイ終了｜アンケートに答えてください';
     p.textContent = text;
     p.dataset.phase = st.phase;
     p.style.display = 'block';
-    // 結果画面を開いたまま必須時間を過ぎた場合も、案内を切り替える
-    if (id === 'screen-postgame' && st.phase !== lastPhase) updatePostgame();
-    lastPhase = st.phase;
+    // 結果画面を開いたまま時間を過ぎた場合も、案内を切り替える
+    if (id === 'screen-postgame' && phaseKey !== lastPhase) updatePostgame();
+    lastPhase = phaseKey;
   }
   setInterval(tick, 1000);
 
@@ -208,17 +242,29 @@
     const ctaText = qs('.survey-cta-text', box); if (ctaText) ctaText.textContent = 'プレイおつかれさまでした。ここでアンケートにご協力ください。';
     if (goBtn) { goBtn.disabled = false; goBtn.lastChild.textContent = 'アンケートに進む'; }
 
-    // アンケート送信後：ここからのプレイは研究データに含めない（自由に遊べる）
+    // アンケート送信後：任意の追加プレイ（最大10分・いつでも終了できる）
     if (isSubmitted()) {
       box.style.display = 'none';
-      note.innerHTML = 'アンケートは送信済みです。ここからは自由に遊べます。<br><span class="hint">このページはいつ閉じてもかまいません。</span>'
-        + '<div class="gate-ai"><button type="button" id="btn-ai-trial-postgame" class="btn btn-tertiary">AIでタイプ診断してみる（任意）</button></div>';
-      const ab = qs('#btn-ai-trial-postgame');
-      if (ab) ab.onclick = () => startAiTrial();
-      again.textContent = 'もう一度プレイ';
-      again.className = 'btn btn-primary';
-      again.style.display = '';
-      if (back) back.style.display = '';
+      const finishBtn = '<div class="gate-ai"><button type="button" id="btn-finish-postgame" class="btn btn-tertiary">ここで終了する</button></div>';
+      const ex = extraState();
+      if (isAiTrial()) {
+        note.innerHTML = 'AIでのタイプ診断を試しています（研究データには含まれません）。<br><span class="hint">このページはいつ閉じてもかまいません。</span>';
+        again.style.display = '';
+        if (back) back.style.display = '';
+      } else if (ex.phase === 'over') {
+        note.innerHTML = '<strong>追加プレイの時間（最大10分）が終わりました。</strong><br>ご協力ありがとうございました。' + finishBtn;
+        again.style.display = 'none';
+        if (back) back.style.display = 'none';
+      } else {
+        const rest = ex.phase === 'playing' ? `残り約${ceilMin(ex.remaining)}分` : '最大10分';
+        note.innerHTML = `アンケートは送信済みです。追加プレイ（任意・${rest}）を続けられます。<br><span class="hint">いつでも終了できます。どちらを選んでも不利益はありません。</span>` + finishBtn;
+        again.textContent = 'もう一度プレイ';
+        again.className = 'btn btn-primary';
+        again.style.display = '';
+        if (back) back.style.display = '';
+      }
+      const fb = qs('#btn-finish-postgame');
+      if (fb) fb.onclick = () => openEnd();
       return;
     }
 
@@ -226,38 +272,35 @@
     lastPhase = st.phase;
     if (st.phase === 'notStarted' || st.phase === 'required') {
       box.style.display = 'none';
-      note.innerHTML = `<strong>あと約${ceilMin(st.remaining)}分</strong>プレイしたら、一度アンケートに答えていただきます。<br><span class="hint">「もう一度プレイ」で続けてください。制限時間などは「設定に戻る」から変えられます。</span>`;
+      note.innerHTML = `<strong>あと約${ceilMin(st.remaining)}分</strong>プレイしたら、アンケートに答えていただきます。<br><span class="hint">「もう一度プレイ」で続けてください。制限時間などは「設定に戻る」から変えられます。</span>`;
       again.textContent = 'もう一度プレイ';
       again.className = 'btn btn-primary';
       again.style.display = '';
       if (back) back.style.display = '';
     } else {
-      // 5分たったら、まずアンケート（回答後は続けて遊べる）
+      // 10分たったら、まずアンケート（回答後は、希望すれば最大10分追加で遊べる）
       mark('freeChoiceShown');
       box.style.display = 'block';
-      note.innerHTML = '<strong>5分のプレイが終わりました。</strong><br>ここで一度アンケートに答えてください。<br><span class="hint">回答を送信したあとは、続けて遊べます。</span>';
+      note.innerHTML = '<strong>10分のプレイが終わりました。</strong><br>ここでアンケートに答えてください。';
       again.style.display = 'none';
       if (back) back.style.display = 'none';
     }
   }
 
-  /* ---------------- アプリ内アンケート ---------------- */
+  /* ---------------- アプリ内アンケート（T0・T1・T2） ---------------- */
   let surveyOpen = false;
-  let draft = load(KEYS.draft, null) || { page: 0, answers: {} };
+  let currentStage = null;
+  let returnScreen = null;   // アンケートを閉じたときに戻る画面
+  function freshDraft() { return { answers: {}, pages: { T0: 0, T1: 0, T2: 0 } }; }
+  let draft = load(KEYS.draft, null);
+  if (!draft || !draft.pages) draft = freshDraft();
 
   function saveDraft() { save(KEYS.draft, draft); }
   function isSubmitted() { return !!load(KEYS.submitted, null); }
   function items() { return window.PostSurveyItems; }
 
-  function openSurvey() {
-    if (surveyOpen) return;
-    const P = items();
-    if (!P) { alert('アンケートの読み込みに失敗しました。ページを再読み込みしてください。'); return; }
-    surveyOpen = true;
-    mark('surveyStart');
-    snapshotChat();
+  function surveySection() {
     const app = document.getElementById('app');
-    document.querySelectorAll('#app .screen').forEach((s) => s.classList.remove('active'));
     let sec = document.getElementById('screen-post-survey');
     if (!sec) {
       sec = document.createElement('section');
@@ -267,24 +310,64 @@
       sec.addEventListener('keydown', (e) => e.stopPropagation());
       app.appendChild(sec);
     }
+    return sec;
+  }
+  function showSurveySection() {
+    const cur = activeScreenId();
+    if (cur && cur !== 'screen-post-survey') returnScreen = cur;
+    document.querySelectorAll('#app .screen').forEach((s) => s.classList.remove('active'));
+    const sec = surveySection();
     sec.classList.add('active');
     if (pill) pill.style.display = 'none';
-    if (load(KEYS.submitted, null)) renderDone(sec);
-    else renderPage(sec);
     window.scrollTo(0, 0);
+    return sec;
+  }
+  function closeSurvey() {
+    surveyOpen = false;
+    currentStage = null;
+    const sec = document.getElementById('screen-post-survey');
+    if (sec) sec.classList.remove('active');
+    const back = returnScreen && document.getElementById(returnScreen);
+    const target = back || document.querySelector('#app .screen');
+    if (target) {
+      document.querySelectorAll('#app .screen').forEach((s) => s.classList.remove('active'));
+      target.classList.add('active');
+    }
+    window.scrollTo(0, 0);
+    tick();
   }
 
-  // アンケート群は、最初の診断でHexad-12に答えているので、事後アンケートのHexad-12のページを省く
+  function openStage(stage) {
+    const P = items();
+    if (!P) { alert('アンケートの読み込みに失敗しました。ページを再読み込みしてください。'); return; }
+    if (stage === 'T2' && isSubmitted()) { openEnd(); return; }
+    if (surveyOpen && currentStage === stage) return;
+    surveyOpen = true;
+    currentStage = stage;
+    mark(stage === 'T2' ? 'surveyStart' : `${stage.toLowerCase()}Start`);
+    if (stage === 'T2') snapshotChat();
+    const sec = showSurveySection();
+    renderPage(sec);
+  }
+  function openSurvey() { openStage('T2'); }
+
+  // アンケート群は、最初の診断で動機づけ傾向の12問に答えているので、T2のそのページを省く
   function onboardingHexAnswers() {
     const P = items();
     const saved = load(KEYS.onboardingAnswers, null);
     if (!saved || participant().group !== 'B') return null;
     const hexIds = P.ALL_ITEMS.filter((it) => it.scale === 'HEX').map((it) => it.id);
-    return hexIds.every((id) => Number(saved[id]) >= 1) ? saved : null;
+    const ok = (v) => v === 'DK' || (Number(v) >= 1 && Number(v) <= 7);
+    return hexIds.every((id) => ok(saved[id])) ? saved : null;
   }
-  function activeSections() {
+  function stageSections(stage) {
     const P = items();
-    return onboardingHexAnswers() ? P.SECTIONS.filter((sec) => sec.id !== 'hexad') : P.SECTIONS;
+    const secs = P.SECTIONS.filter((s) => s.stage === stage);
+    return stage === 'T2' && onboardingHexAnswers() ? secs.filter((s) => s.id !== 'hexad') : secs;
+  }
+  function askedSections(upTo) {
+    const order = ['T0', 'T1', 'T2'];
+    return order.slice(0, order.indexOf(upTo) + 1).flatMap((st) => stageSections(st));
   }
 
   function visibleItems(section) {
@@ -292,29 +375,30 @@
     return section.items.filter((it) => P.isVisible(it, draft.answers));
   }
 
+  function radioRow(it, opts, cls) {
+    const v = draft.answers[it.id];
+    return `<div class="${cls}">${opts.map((o) => `
+      <label><input type="radio" name="${it.id}" value="${esc(o.value)}"${String(v) === String(o.value) ? ' checked' : ''}><span>${esc(o.label)}</span></label>`).join('')}
+    </div>`;
+  }
   function itemHtml(it, num) {
     const P = items();
     const v = draft.answers[it.id];
-    const req = it.optional ? '<span class="ps-optional">任意</span>' : '';
-    const head = `<p class="ps-q"><span class="ps-num">Q${num}</span>${esc(it.text)}${req}</p>`;
-    if (it.type === 'likert5') {
+    const opt = it.optional ? '<span class="ps-optional">任意</span>' : '';
+    const head = `<p class="ps-q"><span class="ps-num">Q${num}</span>${esc(it.text)}${opt}</p>${it.note ? `<p class="hint ps-note">${esc(it.note)}</p>` : ''}`;
+    if (it.type === 'likert5' || it.type === 'likert7') {
+      const all = P.optionsOf(it);
+      const n = it.type === 'likert5' ? 5 : 7;
+      const nums = all.slice(0, n).map((o, i) => ({ value: o.value, label: o.label.replace(/^\d+\s*/, '') , n: i + 1 }));
+      const extra = all.slice(n);
       return `<div class="survey-item ps-item" data-id="${it.id}">${head}
-        <div class="likert">${P.LIKERT5.map((lbl, i) => `
-          <label><input type="radio" name="${it.id}" value="${i + 1}"${String(v) === String(i + 1) ? ' checked' : ''}><span>${esc(lbl)}</span></label>`).join('')}
-        </div></div>`;
-    }
-    if (it.type === 'likert7') {
-      return `<div class="survey-item ps-item" data-id="${it.id}">${head}
-        <div class="likert likert7">${[1, 2, 3, 4, 5, 6, 7].map((n) => `
-          <label><input type="radio" name="${it.id}" value="${n}"${String(v) === String(n) ? ' checked' : ''}><span>${n}</span></label>`).join('')}
+        <div class="likert ${it.type === 'likert7' ? 'likert7' : 'likert5'}">${nums.map((o) => `
+          <label><input type="radio" name="${it.id}" value="${o.value}"${String(v) === o.value ? ' checked' : ''}><b class="lk-n">${o.n}</b><span>${esc(o.label)}</span></label>`).join('')}
         </div>
-        <div class="likert7-ends"><span>1＝${esc(P.LIKERT7_ENDS[0])}</span><span>7＝${esc(P.LIKERT7_ENDS[1])}</span></div></div>`;
+        ${radioRow(it, extra, 'choice-list likert-extra')}</div>`;
     }
     if (it.type === 'choice') {
-      return `<div class="survey-item ps-item" data-id="${it.id}">${head}
-        <div class="choice-list">${it.options.map((o) => `
-          <label><input type="radio" name="${it.id}" value="${esc(o.value)}"${v === o.value ? ' checked' : ''}><span>${esc(o.label)}</span></label>`).join('')}
-        </div></div>`;
+      return `<div class="survey-item ps-item" data-id="${it.id}">${head}${radioRow(it, it.options, 'choice-list')}</div>`;
     }
     return `<div class="survey-item ps-item" data-id="${it.id}">${head}
       <textarea name="${it.id}" rows="3" class="ps-text" maxlength="2000">${esc(v || '')}</textarea></div>`;
@@ -322,37 +406,43 @@
 
   function renderPage(sec) {
     const P = items();
-    const sections = activeSections();
-    if (draft.page >= sections.length) draft.page = sections.length - 1;
-    const section = sections[draft.page];
-    const before = sections.slice(0, draft.page).reduce((n, s) => n + visibleItems(s).length, 0);
+    const stage = currentStage;
+    const sections = stageSections(stage);
+    let page = draft.pages[stage] || 0;
+    if (page >= sections.length) page = sections.length - 1;
+    draft.pages[stage] = page;
+    const section = sections[page];
+    const before = sections.slice(0, page).reduce((n, s) => n + visibleItems(s).length, 0);
     const vis = visibleItems(section);
-    const isLast = draft.page === sections.length - 1;
-    const pct = Math.round((draft.page / sections.length) * 100);
+    const isLast = page === sections.length - 1;
+    const pct = Math.round((page / sections.length) * 100);
     const placeholderWarn = P.hasPlaceholders()
       ? '<p class="ps-warn">（研究者向け）設問文が未設定の項目があります。post-survey-items.js を確認してください。</p>' : '';
+    const meta = P.STAGES[stage];
+    const pageInfo = sections.length > 1 ? `${meta.label} ${page + 1} / ${sections.length} ページ` : meta.label;
 
     sec.innerHTML = `
       <div class="card ps-card">
         ${placeholderWarn}
         <div class="ps-progress"><span style="width:${pct}%"></span></div>
-        <p class="hint">アンケート ${draft.page + 1} / ${sections.length} ページ</p>
+        <p class="hint">${esc(pageInfo)}</p>
         <h2>${esc(section.title)}</h2>
+        ${page === 0 ? `<p class="ps-common">${esc(P.INSTRUCTIONS.common)}</p>` : ''}
         ${section.lead ? `<p class="lead">${esc(section.lead)}</p>` : ''}
         <div class="ps-items">${vis.map((it, i) => itemHtml(it, before + i + 1)).join('')}</div>
         <p class="ps-error" id="ps-error" style="display:none;"></p>
         <div class="button-row ps-nav">
-          ${draft.page > 0 ? '<button type="button" class="btn btn-tertiary" id="ps-prev">戻る</button>' : ''}
-          <button type="button" class="btn btn-primary" id="ps-next">${isLast ? '回答を送信する' : '次へ'}</button>
+          ${page > 0 ? '<button type="button" class="btn btn-tertiary" id="ps-prev">戻る</button>' : '<span></span>'}
+          <button type="button" class="btn btn-primary" id="ps-next">${isLast ? esc(meta.submitLabel) : '次へ'}</button>
         </div>
       </div>`;
 
     sec.querySelectorAll('input[type="radio"]').forEach((input) => {
       input.addEventListener('change', () => {
         draft.answers[input.name] = input.value;
+        sec.querySelectorAll(`input[name="${input.name}"]`).forEach((r) => { if (r !== input) r.checked = false; });
         const row = input.closest('.ps-item'); if (row) row.classList.remove('missing');
         saveDraft();
-        // 分岐の元になる設問が変わったら、表示する設問を出し直す
         if (P.ALL_ITEMS.some((it) => it.showIf && it.showIf.item === input.name)) {
           const y = window.scrollY; renderPage(sec); window.scrollTo(0, y);
         }
@@ -366,42 +456,74 @@
       });
     });
     const prev = qs('#ps-prev', sec);
-    if (prev) prev.addEventListener('click', () => { draft.page -= 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); });
+    if (prev) prev.addEventListener('click', () => { draft.pages[stage] -= 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); });
     qs('#ps-next', sec).addEventListener('click', () => {
+      // 回答は原則必須（記述式など optional の設問だけ空欄で進める）。判断できない場合は「判断できない」を選んでもらう
       const missing = vis.filter((it) => !it.optional && !String(draft.answers[it.id] ?? '').trim());
       if (missing.length) {
         missing.forEach((it) => { const row = sec.querySelector(`.ps-item[data-id="${it.id}"]`); if (row) row.classList.add('missing'); });
         const err = qs('#ps-error', sec);
-        err.textContent = `未回答の質問が ${missing.length} 件あります（赤枠の質問）。`;
+        const hasDk = missing.some((it) => it.type === 'likert5' || it.type === 'likert7' || (it.options || []).some((o) => o.value === 'DK'));
+        err.textContent = `未回答の質問が ${missing.length} 件あります（赤枠の質問）。${hasDk ? '判断できない場合は「判断できない」を選んでください。' : ''}`;
         err.style.display = 'block';
         const first = sec.querySelector('.ps-item.missing');
         if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
-      if (!isLast) { draft.page += 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); return; }
-      submit(sec);
+      if (!isLast) { draft.pages[stage] += 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); return; }
+      completeStage(stage, sec);
     });
   }
 
-  function buildPayload() {
+  function completeStage(stage, sec) {
+    if (stage === 'T2') { submit(sec); return; }
+    mark(stage === 'T0' ? 't0Submit' : 't1Submit');
+    saveDraft();
+    postPayload(buildPayload(stage)); // 途中経過（失敗しても先へ進める。最後の送信にすべて含まれる）
+    if (stage === 'T0') { closeSurvey(); return; }
+    // T1：回答後、全群共通の10分のプレイへ
+    sec.innerHTML = `
+      <div class="card center ps-card">
+        <h2>ありがとうございました</h2>
+        <p class="lead">ここから、全員共通のタイピングを<strong>約10分</strong>行います。<br>画面上部に残り時間が表示されます。</p>
+        <p><button type="button" id="ps-go-play" class="btn btn-primary">タイピングを始める</button></p>
+      </div>`;
+    qs('#ps-go-play', sec).addEventListener('click', () => {
+      closeSurvey();
+      const start = document.getElementById('btn-start-game');
+      if (start) start.click();
+    });
+  }
+
+  function answerValue(it, v) {
+    if (v === undefined || v === null || String(v).trim() === '') return undefined;
+    const s = String(v).trim();
+    if ((it.type === 'likert5' || it.type === 'likert7') && /^\d+$/.test(s)) return Number(s);
+    return s;
+  }
+
+  function buildPayload(stage) {
     const P = items();
     const { pid, group } = participant();
     const answers = {};
-    const onbHex = onboardingHexAnswers();
-    const asked = new Set(activeSections().flatMap((sec) => sec.items.map((it) => it.id)));
+    const onbHex = stage === 'T2' ? onboardingHexAnswers() : null;
+    const asked = new Set(askedSections(stage).flatMap((sec) => sec.items.map((it) => it.id)));
     P.ALL_ITEMS.forEach((it) => {
       if (!asked.has(it.id) || !P.isVisible(it, draft.answers)) return;
-      const v = draft.answers[it.id];
-      if (v === undefined || v === null || String(v).trim() === '') return;
-      answers[it.id] = it.type === 'likert5' || it.type === 'likert7' ? Number(v) : String(v).trim();
+      const v = answerValue(it, draft.answers[it.id]);
+      if (v !== undefined) answers[it.id] = v;
     });
-    // アンケート群：最初の診断で答えたHexad-12を、事後アンケートのHEX01〜12として使う
+    // アンケート群：最初の診断で答えた動機づけ傾向12問を、T2のHEX01〜12として使う
     if (onbHex) {
-      P.ALL_ITEMS.filter((it) => it.scale === 'HEX').forEach((it) => { answers[it.id] = Number(onbHex[it.id]); });
+      P.ALL_ITEMS.filter((it) => it.scale === 'HEX').forEach((it) => {
+        const v = answerValue(it, onbHex[it.id]);
+        if (v !== undefined) answers[it.id] = v;
+      });
     }
     const st = (typeof appState !== 'undefined' && appState) ? appState : {};
-    mark('surveySubmit', { overwrite: true });
+    if (stage === 'T2') mark('surveySubmit', { overwrite: true });
     return {
+      stage: stage === 'T2' ? 'final' : stage,
       participantId: pid,
       entryId: entryId(),
       group,
@@ -447,7 +569,7 @@
     const btn = qs('#ps-next', sec);
     btn.disabled = true;
     btn.textContent = '送信中...';
-    const payload = buildPayload();
+    const payload = buildPayload('T2');
     save(KEYS.pending, payload); // 送信に失敗しても、この端末に回答を残しておく
     const ok = await postPayload(payload);
     if (ok) {
@@ -464,13 +586,42 @@
     err.style.display = 'block';
   }
 
+  // 送信直後：任意の追加プレイの案内（修正版の「任意追加プレイの案内」）
   function renderDone(sec) {
+    const P = items();
     const { pid } = participant();
     sec.innerHTML = `
       <div class="card center ps-card">
         <h2>回答を送信しました</h2>
-        <p class="lead">ご協力ありがとうございました。このページは閉じてかまいません。</p>
-        <p><button type="button" id="btn-play-more" class="btn btn-secondary">続けて遊ぶ（任意）</button></p>
+        <p class="lead ps-extra-guide">${esc(P.INSTRUCTIONS.extraPlay)}</p>
+        <div class="button-row ps-extra-choice">
+          <button type="button" id="btn-play-more" class="btn btn-primary">追加で遊ぶ（最大10分）</button>
+          <button type="button" id="btn-finish" class="btn btn-secondary">ここで終了する</button>
+        </div>
+        ${pid ? `<p class="hint">参加者番号: ${esc(pid)}</p>` : ''}
+      </div>`;
+    qs('#btn-play-more', sec).addEventListener('click', () => {
+      mark('extraPlayChosen');
+      closeSurvey();
+      if (typeof renderSetup === 'function') renderSetup(); // 各群のスクリプトの関数
+      if (typeof showScreen === 'function') showScreen('screen-setup');
+    });
+    qs('#btn-finish', sec).addEventListener('click', () => renderEnd(sec));
+  }
+
+  // 終了：お礼・研究の説明・（任意）AIでタイプ診断してみる
+  function openEnd() {
+    surveyOpen = true;
+    currentStage = null;
+    renderEnd(showSurveySection());
+  }
+  function renderEnd(sec) {
+    mark('finished');
+    const { pid } = participant();
+    sec.innerHTML = `
+      <div class="card center ps-card">
+        <h2>ご協力ありがとうございました</h2>
+        <p class="lead">これで終了です。このページは閉じてかまいません。</p>
         ${pid ? `<p class="hint">参加者番号: ${esc(pid)}</p>` : ''}
         <div class="ps-debrief">
           <h3>この研究について</h3>
@@ -479,17 +630,10 @@
         </div>
         <div class="ps-after">
           <h3>AIでタイプ診断してみる（任意）</h3>
-          <p>AIとの短い対話で、あなたのタイプを診断します。診断結果に合わせた画面で、続けて遊べます。研究のデータはすでに送信済みなので、ここからは自由に試してください。コインや自己ベストなどの記録は残ります。</p>
+          <p>AIとの短い対話で、あなたのタイプを診断します。診断結果に合わせた画面で、続けて遊べます。研究のデータはすでに送信済みなので、ここからは自由に試してください（研究データには含まれません）。</p>
           <button type="button" id="btn-ai-trial-done" class="btn btn-secondary">AIでタイプ診断する</button>
         </div>
       </div>`;
-    const pm = sec.querySelector('#btn-play-more');
-    if (pm) pm.addEventListener('click', () => {
-      surveyOpen = false;
-      sec.classList.remove('active');
-      if (typeof renderSetup === 'function') renderSetup(); // 各群のスクリプトの関数
-      if (typeof showScreen === 'function') showScreen('screen-setup');
-    });
     const ab = sec.querySelector('#btn-ai-trial-done');
     if (ab) ab.addEventListener('click', () => startAiTrial());
   }
@@ -567,8 +711,9 @@
         .filter((k) => k.startsWith('gtp_') && !KEEP_ON_RESET.includes(k))
         .forEach((k) => localStorage.removeItem(k));
     } catch (e) {}
-    draft = { page: 0, answers: {} };
+    draft = freshDraft();
     surveyOpen = false;
+    currentStage = null;
     lastPhase = null;
     const id = newId();
     save(KEYS.entryId, id);
@@ -586,12 +731,34 @@
     bump('n_resumes');
     mark('lastResume', { overwrite: true });
   }
-  // 再開後、前回いた段階に戻す：アンケートの途中ならアンケートへ、診断が済んでいれば練習の準備画面へ
+  // 再開後、前回いた段階に戻す
   function resumeView() {
     const ev = getEvents();
-    if ((ev.surveyStart || playGated()) && !load(KEYS.submitted, null)) { openSurvey(); return; }
-    const resumeBtn = document.getElementById('btn-resume-session');
-    if (resumeBtn && resumeBtn.style.display !== 'none') resumeBtn.click();
+    const clickResume = () => {
+      const resumeBtn = document.getElementById('btn-resume-session');
+      if (resumeBtn && resumeBtn.style.display !== 'none') resumeBtn.click();
+    };
+    if (isSubmitted()) { clickResume(); return; }
+    if (!ev.t0Submit) { openStage('T0'); return; }
+    if (ev.surveyStart || playGated()) { openStage('T2'); return; }
+    clickResume();
+    if (ev.t1Start && !ev.t1Submit) openStage('T1');
+  }
+
+  // 各群のスクリプトが読み込まれた後に呼ぶ（index.html）。
+  // アンケートを開いている間に各群のスクリプトが画面を切り替えた場合は、閉じたときに戻る画面として覚えておく。
+  function afterLoad(resume) {
+    const orig = window.showScreen;
+    if (typeof orig === 'function' && !orig.__studyFlow) {
+      const wrapped = function (id) {
+        if (surveyOpen && id !== 'screen-post-survey') { returnScreen = id; return; }
+        return orig.apply(this, arguments);
+      };
+      wrapped.__studyFlow = true;
+      window.showScreen = wrapped;
+    }
+    if (resume) { resumeView(); return; }
+    if (!stageDone('T0') && !isSubmitted()) openStage('T0');
   }
 
   function entryId() {
@@ -601,10 +768,10 @@
   }
 
   window.StudyFlow = {
-    resetForNewParticipant, entryId, previousEntry, markResume, resumeView,
-    REQUIRED_PLAY_MS, MAX_PLAY_MS,
-    mark, bump, getEvents, playState,
-    updatePostgame, openSurvey,
+    resetForNewParticipant, entryId, previousEntry, markResume, resumeView, afterLoad,
+    REQUIRED_PLAY_MS, MAX_PLAY_MS, EXTRA_PLAY_MS,
+    mark, bump, getEvents, playState, extraState,
+    updatePostgame, openSurvey, openStage, openEnd,
     recordClear, easeFactor, archiveDiagnosis, isSubmitted, isAiTrial, startAiTrial,
   };
 })();
