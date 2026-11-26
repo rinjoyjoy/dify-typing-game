@@ -741,3 +741,5 @@ h1, h2 { letter-spacing: 0.02em; font-weight: 700; }
 .entry-input-row input:focus { outline: none; border-color: var(--type-achiever); }
 .entry-input-row .btn { flex: 0 0 auto; }
 #pid-error { margin-top: 8px; }
+/* 診断結果画面の「次へ」（→だけ） */
+.btn-arrow { min-width: 96px; font-size: 1.3rem; line-height: 1; }

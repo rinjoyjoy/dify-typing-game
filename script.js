@@ -1041,7 +1041,7 @@ function appendChatMessage(role, text) {
       finishBtn.style.width = '100%';
       finishBtn.style.padding = '12px';
       finishBtn.style.fontWeight = 'bold';
-      finishBtn.textContent = 'タイピングゲームを始める';
+      finishBtn.textContent = '診断結果を見る';
       finishBtn.onclick = () => {
         $('#btn-chat-finish').click();
       };
@@ -1277,7 +1277,7 @@ async function handleChatSend() {
         const errorData = await res.json();
         if (errorData.error) {
           if (typeof errorData.error === 'string' && errorData.error.includes('RESOURCE_EXHAUSTED')) {
-            errMsg = '現在AIの利用制限（上限）に達しているため、回答できません。少し待ってから再度お試しいただくか、「会話を終了してゲームを始める」ボタンから簡易診断に進んでください。';
+            errMsg = '現在AIの利用制限（上限）に達しているため、回答できません。少し待ってから再度お試しいただくか、「会話を終了して診断結果を見る」ボタンから簡易診断に進んでください。';
           } else {
             errMsg += `: ${errorData.error}`;
           }
