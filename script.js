@@ -964,6 +964,46 @@ function renderSurvey() {
   $('#btn-chat-send').disabled = false;
 }
 
+// AIの発言から選択肢を取り出す（appendChatMessage で使う）
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
+function normalizeChoiceLine(line) {
+  let l = String(line)
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/([0-9])\uFE0F?\u20E3/g, '$1.') // 1️⃣
+    .replace(/[①-⑩]/g, (c) => `${CIRCLED.indexOf(c) + 1}.`)
+    .trim();
+  l = l.replace(/^(?:[-*・•>]\s*)+/, '').replace(/^\*\*/, '').trim();
+  l = l.replace(/^[(（]\s*([0-9]+)\s*[)）]/, '$1.');
+  return l;
+}
+const CHOICE_LINE_RE = /^([0-9]{1,2})\s*[.、)）．:：]\s*(.+)$/;
+const INLINE_CHOICE_RE = /([0-9]{1,2})\s*[.、)）．]\s*(.+?)(?=\s*[0-9]{1,2}\s*[.、)）．]|$)/g;
+function cleanChoiceText(t) {
+  return t.replace(/\*\*/g, '').replace(/^[「『]|[」』]$/g, '').trim();
+}
+function parseChatChoices(text) {
+  const mainText = [];
+  const buttons = [];
+  String(text).split('\n').forEach((raw) => {
+    let line = normalizeChoiceLine(raw);
+    // 質問文と同じ行に「1. 〜 2. 〜」が続く場合は、「1.」の前までを本文にする
+    const lead = line.match(/^(.*?[\s　。？?！!：:])(1\s*[.、)）．].*2\s*[.、)）．].*)$/);
+    if (lead && !/^[0-9]/.test(line)) { mainText.push(lead[1].trim()); line = lead[2]; }
+    const inline = [...line.matchAll(INLINE_CHOICE_RE)];
+    if (inline.length > 1 && /^[0-9]/.test(line)) {
+      inline.forEach((m) => buttons.push(cleanChoiceText(m[2])));
+      return;
+    }
+    const m = line.match(CHOICE_LINE_RE);
+    if (m && cleanChoiceText(m[2])) buttons.push(cleanChoiceText(m[2]));
+    else mainText.push(raw);
+  });
+  if (buttons.length < 2) return { mainText: String(text).split('\n'), buttons: [] };
+  // 本文の末尾の空行を除く
+  while (mainText.length && !mainText[mainText.length - 1].trim()) mainText.pop();
+  return { mainText, buttons };
+}
+
 function appendChatMessage(role, text) {
   const container = $('#chat-messages');
   const msgDiv = document.createElement('div');
@@ -976,28 +1016,11 @@ function appendChatMessage(role, text) {
     let hasChoices = false;
     let choicesHtml = '';
     
-    // 選択肢の行（例:「1. 〜」）をボタンにする。行頭の空白・全角数字・「1)」「1）」「1．」の形にも対応する
-    const CHOICE_LINE = /^\s*([0-9０-９]+)\s*[\.\、\)）．]\s*(.+)$/;
-    if (text.split('\n').some((l) => CHOICE_LINE.test(l))) {
-      const lines = text.split('\n');
-      let mainText = [];
-      let buttons = [];
-      
-      lines.forEach(line => {
-        const m = line.match(CHOICE_LINE);
-        if (m) {
-          buttons.push(m[2].trim());
-        } else {
-          const inlineMatches = [...line.matchAll(/(\d+)[\.\、]\s*([^1-9]+)(?=\d+[\.\、]|$)/g)];
-          if (inlineMatches.length > 1) {
-            inlineMatches.forEach(im => buttons.push(im[2].trim()));
-          } else {
-            mainText.push(line);
-          }
-        }
-      });
-      
-      if (buttons.length > 0) {
+    // 選択肢の行（例:「1. 〜」）をボタンにする。AIの書き方の揺れ（全角数字・「1)」「1）」「1．」「(1)」「①」「1️⃣」、
+    // 行頭の「- 」「・」、太字の「**」、1行に並べた「1. 〜 2. 〜」）にも対応する。2つ以上見つかったときだけボタンにする
+    const { mainText, buttons } = parseChatChoices(text);
+    {
+      if (buttons.length >= 2) {
         msgDiv.innerHTML = mainText.join('<br>') + '<div class="chat-choices">';
         const choicesContainer = document.createElement('div');
         choicesContainer.className = 'chat-choices';
