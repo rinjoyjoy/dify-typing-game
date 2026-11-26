@@ -376,8 +376,8 @@
 
   <script src="icons.js"></script>
   <script src="survey-data.js"></script>
-  <script src="post-survey-items.js?v=20261126"></script>
-  <script src="study-flow.js?v=20261126"></script>
+  <script src="post-survey-items.js?v=20261126b"></script>
+  <script src="study-flow.js?v=20261126b"></script>
   <script>
     'use strict';
     // 参加者番号を3で割った余りで3群に割り付ける。番号を送信するまでは
@@ -389,9 +389,9 @@
     // 番号を 1, 2, 3, … の順に配れば、3人ごとに各群1人ずつになる（各群の人数がそろう）。
     (function () {
       const GROUP_CONFIG = {
-        A: { template: 'tpl-group-a', script: 'script.js?v=20261126' },
-        B: { template: 'tpl-group-b', script: 'script-survey-only.js?v=20261126' },
-        C: { template: 'tpl-group-c', script: 'script-no-diagnosis.js?v=20261126' },
+        A: { template: 'tpl-group-a', script: 'script.js?v=20261126b' },
+        B: { template: 'tpl-group-b', script: 'script-survey-only.js?v=20261126b' },
+        C: { template: 'tpl-group-c', script: 'script-no-diagnosis.js?v=20261126b' },
       };
 
       function groupForParticipant(n) {

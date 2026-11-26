@@ -14,7 +14,7 @@
   const REQUIRED_PLAY_MS = 10 * 60 * 1000;  // 全群共通のプレイ：初回のスタートから10分
   const MAX_PLAY_MS = REQUIRED_PLAY_MS;     // 10分たったら、アンケートを送信するまで新しいプレイは始められない
   const EXTRA_PLAY_MS = 10 * 60 * 1000;     // アンケート送信後の任意の追加プレイ：最大10分（最初の追加プレイの開始から）
-  const ITEMS_VERSION = '2026-11-26';
+  const ITEMS_VERSION = '2026-11-26b';
 
   const KEYS = {
     events: 'gtp_study_events',
@@ -291,7 +291,6 @@
   let surveyOpen = false;
   let currentStage = null;
   let returnScreen = null;   // アンケートを閉じたときに戻る画面
-  let warnedPage = null;     // 未回答があるまま「次へ」を押したページ（2回目は進める）
   function freshDraft() { return { answers: {}, pages: { T0: 0, T1: 0, T2: 0 } }; }
   let draft = load(KEYS.draft, null);
   if (!draft || !draft.pages) draft = freshDraft();
@@ -457,22 +456,20 @@
       });
     });
     const prev = qs('#ps-prev', sec);
-    if (prev) prev.addEventListener('click', () => { draft.pages[stage] -= 1; warnedPage = null; saveDraft(); renderPage(sec); window.scrollTo(0, 0); });
+    if (prev) prev.addEventListener('click', () => { draft.pages[stage] -= 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); });
     qs('#ps-next', sec).addEventListener('click', () => {
-      // 答えたくない設問は空欄のままでよい（共通教示）。未回答があれば一度だけ知らせ、もう一度押せば進める
+      // 回答は原則必須（記述式など optional の設問だけ空欄で進める）。判断できない場合は「判断できない」を選んでもらう
       const missing = vis.filter((it) => !it.optional && !String(draft.answers[it.id] ?? '').trim());
-      const key = `${stage}:${page}`;
-      if (missing.length && warnedPage !== key) {
-        warnedPage = key;
+      if (missing.length) {
         missing.forEach((it) => { const row = sec.querySelector(`.ps-item[data-id="${it.id}"]`); if (row) row.classList.add('missing'); });
         const err = qs('#ps-error', sec);
-        err.textContent = `未回答の質問が ${missing.length} 件あります（赤枠の質問）。答えたくない設問は空欄のままでかまいません。このまま進む場合は、もう一度「${isLast ? meta.submitLabel : '次へ'}」を押してください。`;
+        const hasDk = missing.some((it) => it.type === 'likert5' || it.type === 'likert7' || (it.options || []).some((o) => o.value === 'DK'));
+        err.textContent = `未回答の質問が ${missing.length} 件あります（赤枠の質問）。${hasDk ? '判断できない場合は「判断できない」を選んでください。' : ''}`;
         err.style.display = 'block';
         const first = sec.querySelector('.ps-item.missing');
         if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
-      warnedPage = null;
       if (!isLast) { draft.pages[stage] += 1; saveDraft(); renderPage(sec); window.scrollTo(0, 0); return; }
       completeStage(stage, sec);
     });
